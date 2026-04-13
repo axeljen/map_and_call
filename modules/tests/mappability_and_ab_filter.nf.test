@@ -1,0 +1,220 @@
+```groovy
+nextflow_process {
+    name "Test Process ab_dp_filter"
+    script "main.nf"
+    process "ab_dp_filter"
+
+    test("ab_dp_filter should filter VCF by allele balance and depth") {
+        
+        when {
+            params {
+                outdir = "results"
+                min_allele_balance = 0.25
+            }
+            process {
+                """
+                input[0] = tuple(
+                    'region1',
+                    'sample1',
+                    file("${projectDir}/test_data/input.vcf.gz"),
+                    file("${projectDir}/test_data/input.vcf.gz.csi"),
+                    10,
+                    100,
+                    'XX',
+                    ['chrX', 'chrY'],
+                    'category1'
+                )
+                """
+            }
+        }
+
+        then {
+            assert process.success
+            assert process.trace.tasks().size() == 1
+            with(process.out.ab_dp_filtered_vcf) {
+                assert size() == 1
+                assert get(0).size() == 4
+                assert get(0)[0] == 'region1'
+                assert get(0)[1] == 'sample1'
+                assert get(0)[2].name == 'category1_sample1_region-region1.ab_dp_filtered.vcf.gz'
+            }
+        }
+    }
+
+    test("ab_dp_filter stub should create placeholder files") {
+        
+        options "-stub"
+        
+        when {
+            params {
+                outdir = "results"
+                min_allele_balance = 0.25
+            }
+            process {
+                """
+                input[0] = tuple(
+                    'region2',
+                    'sample2',
+                    file("${projectDir}/test_data/input.vcf.gz"),
+                    file("${projectDir}/test_data/input.vcf.gz.csi"),
+                    15,
+                    150,
+                    'XY',
+                    ['chrX'],
+                    'category2'
+                )
+                """
+            }
+        }
+
+        then {
+            assert process.success
+            with(process.out.ab_dp_filtered_vcf) {
+                assert size() == 1
+                assert get(0)[2].name == 'category2_sample2_region-region2.ab_dp_filtered.vcf.gz'
+            }
+        }
+    }
+}
+
+nextflow_process {
+    name "Test Process mappability_filter"
+    script "main.nf"
+    process "mappability_filter"
+
+    test("mappability_filter should filter VCF by mappability regions") {
+        
+        when {
+            params {
+                outdir = "results"
+            }
+            process {
+                """
+                input[0] = tuple(
+                    'region1',
+                    'sample1',
+                    file("${projectDir}/test_data/input.vcf.gz"),
+                    file("${projectDir}/test_data/input.vcf.gz.csi"),
+                    file("${projectDir}/test_data/mappability.bed"),
+                    'category1'
+                )
+                """
+            }
+        }
+
+        then {
+            assert process.success
+            assert process.trace.tasks().size() == 1
+            with(process.out.vcf) {
+                assert size() == 1
+                assert get(0).size() == 5
+                assert get(0)[0] == 'region1'
+                assert get(0)[1] == 'sample1'
+                assert get(0)[2].name == 'category1_sample1_region-region1.mappability_filtered.vcf.gz'
+                assert get(0)[4] == 'category1'
+            }
+        }
+    }
+
+    test("mappability_filter stub should create placeholder files") {
+        
+        options "-stub"
+        
+        when {
+            params {
+                outdir = "results"
+            }
+            process {
+                """
+                input[0] = tuple(
+                    'region2',
+                    'sample2',
+                    file("${projectDir}/test_data/input.vcf.gz"),
+                    file("${projectDir}/test_data/input.vcf.gz.csi"),
+                    file("${projectDir}/test_data/mappability.bed"),
+                    'category2'
+                )
+                """
+            }
+        }
+
+        then {
+            assert process.success
+            with(process.out.vcf) {
+                assert size() == 1
+                assert get(0)[2].name == 'category2_sample2_region-region2.mappability_filtered.vcf.gz'
+            }
+        }
+    }
+}
+
+nextflow_process {
+    name "Test Process ab_filter"
+    script "main.nf"
+    process "ab_filter"
+
+    test("ab_filter should filter VCF by allele balance") {
+        
+        when {
+            params {
+                outdir = "results"
+                min_allele_balance = 0.3
+            }
+            process {
+                """
+                input[0] = tuple(
+                    'region1',
+                    'sample1',
+                    file("${projectDir}/test_data/input.vcf.gz"),
+                    file("${projectDir}/test_data/input.vcf.gz.csi"),
+                    'category1'
+                )
+                """
+            }
+        }
+
+        then {
+            assert process.success
+            assert process.trace.tasks().size() == 1
+            with(process.out.vcf) {
+                assert size() == 1
+                assert get(0).size() == 4
+                assert get(0)[0] == 'region1'
+                assert get(0)[1] == 'sample1'
+                assert get(0)[2].name == 'category1_sample1_region-region1.ab_filtered.vcf.gz'
+            }
+        }
+    }
+
+    test("ab_filter stub should create placeholder files") {
+        
+        options "-stub"
+        
+        when {
+            params {
+                outdir = "results"
+                min_allele_balance = 0.3
+            }
+            process {
+                """
+                input[0] = tuple(
+                    'region3',
+                    'sample3',
+                    file("${projectDir}/test_data/input.vcf.gz"),
+                    file("${projectDir}/test_data/input.vcf.gz.csi"),
+                    'category3'
+                )
+                """
+            }
+        }
+
+        then {
+            assert process.success
+            with(process.out.vcf) {
+                assert size() == 1
+                assert get(0)[2].name == 'category3_sample3_region-region3.ab_filtered.vcf.gz'
+            }
+        }
+    }
+}
+```" "

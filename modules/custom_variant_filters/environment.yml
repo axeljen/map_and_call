@@ -1,0 +1,9 @@
+name: custom_variant_filters
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - python >=3.8
+  - bioconda::pysam=0.23.3
+  - bioconda::numpy=2.4.4
+  - bioconda::pandas=3.0.2

@@ -1,0 +1,7 @@
+name: qualimap
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - bioconda::qualimap=2.3
+  - bioconda::samtools=1.23.1

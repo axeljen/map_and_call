@@ -1,0 +1,8 @@
+name: gatk
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - gatk4
+  - bcftools

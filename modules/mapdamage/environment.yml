@@ -1,0 +1,7 @@
+name: mapdamage
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - bioconda::mapdamage2=2.2.3
+  - bioconda::samtools=1.23.1

@@ -1,0 +1,6 @@
+name: adapterremoval
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - bioconda::adapterremoval=2.3.4
