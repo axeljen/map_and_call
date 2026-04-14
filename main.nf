@@ -245,51 +245,83 @@ def calculate_depth_and_sex(depth_avg_ch, sex_limited_list, non_sex_limited_list
 }
 
 /*
+ * Get filter expressions for variant calling based on variant caller type
+ * Returns map with snp_filter_expr and indel_filter_expr
+ */
+def get_filter_expressions(caller_type, custom_snp=null, custom_indel=null) {
+    // If custom expressions are provided, use those
+    if (custom_snp && custom_indel) {
+        return [snp_filter_expr: custom_snp, indel_filter_expr: custom_indel]
+    }
+    
+    // Otherwise, return defaults based on variant caller
+    switch(caller_type) {
+        case ['gatk_joint', 'gatk_haplotypecaller']:
+            return [snp_filter_expr: params.snp_filter_expression_gatk, indel_filter_expr: params.indel_filter_expression_gatk]
+        case 'freebayes':
+            return [snp_filter_expr: params.snp_filter_expression_freebayes, indel_filter_expr: params.indel_filter_expression_freebayes]
+        case 'bcftools':
+            return [snp_filter_expr: params.snp_filter_expression_bcftools, indel_filter_expr: params.indel_filter_expression_bcftools]
+        default:
+            error "Unknown variant caller for filter expression: ${caller_type}"
+    }
+}
+
+/*
+ * Setup sex chromosome system and identify sex-linked contigs
+ * Returns map with: sex_chrom_system, sex_linked_list, sex_limited_list, non_sex_limited_list
+ */
+def setup_sex_chromosome_system() {
+    def result = [
+        sex_chrom_system: 'unknown',
+        sex_linked_list: [],
+        sex_limited_list: [],
+        non_sex_limited_list: []
+    ]
+    
+    if (params.x_scaffolds || params.y_scaffolds) {
+        if (params.z_scaffolds || params.w_scaffolds) {
+            error "Please only specify either X and/or Y, OR Z and/or W scaffolds, not both."
+        }
+        result.sex_chrom_system = 'XY'
+        result.sex_linked_list = [params.x_scaffolds, params.y_scaffolds].flatten()
+        result.sex_limited_list = [params.y_scaffolds].flatten()
+        result.non_sex_limited_list = [params.x_scaffolds].flatten()
+    }
+    else if (params.z_scaffolds || params.w_scaffolds) {
+        result.sex_chrom_system = 'ZW'
+        result.sex_linked_list = [params.z_scaffolds, params.w_scaffolds].flatten()
+        result.sex_limited_list = [params.w_scaffolds].flatten()
+        result.non_sex_limited_list = [params.z_scaffolds].flatten()
+    }
+    
+    return result
+}
+
+/*
  * Main workflow
  */
 workflow {
     main:
-    def sex_chrom_system = 'unknown'
-    def sex_linked_contigs = []
-    def sex_limited_contigs = []
-    def non_sex_limited_contigs = []
-    def sex_linked_list = []
-    def sex_limited_list = []
-    def non_sex_limited_list = []
-    // Some quick input checks
+    
+    // Setup sex chromosome system based on user parameters
+    sex_config = setup_sex_chromosome_system()
+    def sex_chrom_system = sex_config.sex_chrom_system
+    def sex_linked_list = sex_config.sex_linked_list
+    def sex_limited_list = sex_config.sex_limited_list
+    def non_sex_limited_list = sex_config.non_sex_limited_list
+    
+    // Validate variant caller parameter
     if (!['gatk_joint','gatk_haplotypecaller','freebayes','bcftools'].contains(params.variant_caller)) {
         error "Unsupported variant caller specified: ${params.variant_caller}. Must be one of gatk_joint, gatk_haplotypecaller, freebayes or bcftools."
     }
-    if (params.x_scaffolds || params.y_scaffolds ){
-        if (params.z_scaffolds || params.w_scaffolds){
-            error "Please only specify either X and/or Y, OR Z and/or W scaffolds, not both. "
-        }
-        else {
-            sex_chrom_system = 'XY'
-            sex_linked_list = [params.x_scaffolds, params.y_scaffolds].flatten()
-            sex_limited_list = [params.y_scaffolds].flatten()
-            non_sex_limited_list = [params.x_scaffolds].flatten()
-            sex_linked_contigs = channel.value(sex_linked_list)
-            sex_limited_contigs = channel.value(sex_limited_list)
-            non_sex_limited_contigs = channel.value(non_sex_limited_list)
-        }
-        }
-    else if (params.z_scaffolds || params.w_scaffolds){
-        sex_chrom_system = 'ZW'
-        sex_linked_list = [params.z_scaffolds, params.w_scaffolds].flatten()
-        sex_limited_list = [params.w_scaffolds].flatten()
-        non_sex_limited_list = [params.z_scaffolds].flatten()
-        sex_linked_contigs = channel.value(sex_linked_list)
-        sex_limited_contigs = channel.value(sex_limited_list)
-        non_sex_limited_contigs = channel.value(non_sex_limited_list)
-    }
-    else {
-        sex_chrom_system = 'unknown'
-        sex_linked_contigs = channel.value([])
-        sex_limited_contigs = channel.value([])
-        non_sex_limited_contigs = channel.value([])
-    }
+    
     println "Inferred sex chromosome system based on user specifications: ${sex_chrom_system}"
+    
+    // Create channels for sex-linked contigs
+    sex_linked_contigs = channel.value(sex_linked_list)
+    sex_limited_contigs = channel.value(sex_limited_list)
+    non_sex_limited_contigs = channel.value(non_sex_limited_list)
 
     // Input channel from metadata file
     ch_input = parse_input(params.input)
@@ -1103,30 +1135,15 @@ workflow {
     snp_ch = select_snps(normalized_vcfs_ch)
     indel_ch = select_indels(normalized_vcfs_ch)
 
-    // check if custom filter critera are set, else go with the defaults depending on the variant caller
-    def snp_filter_expr
-    def indel_filter_expr
-    if (params.snp_filter_expression) {
-        snp_filter_expr = params.snp_filter_expression
-        indel_filter_expr = params.indel_filter_expression
-    }
-    else {
-        if (params.variant_caller == 'gatk_joint' || params.variant_caller == 'gatk_haplotypecaller') {
-            snp_filter_expr = params.snp_filter_expression_gatk
-            indel_filter_expr = params.indel_filter_expression_gatk
-        }
-        else if (params.variant_caller == 'freebayes') {
-            snp_filter_expr = params.snp_filter_expression_freebayes
-            indel_filter_expr = params.indel_filter_expression_freebayes
-        }
-        else if (params.variant_caller == 'bcftools') {
-            snp_filter_expr = params.snp_filter_expression_bcftools
-            indel_filter_expr = params.indel_filter_expression_bcftools
-        }
-    }
+    // Get filter expressions based on variant caller type or user custom expressions
+    filter_expressions = get_filter_expressions(
+        params.variant_caller,
+        params.snp_filter_expression,      // custom SNP filter (or null)
+        params.indel_filter_expression     // custom indel filter (or null)
+    )
 
-    snps_filtered_step1 = bcftools_filter_snps(snp_ch, snp_filter_expr, "snps")
-    indels_filtered_step1 = bcftools_filter_indels(indel_ch, indel_filter_expr, "indels")
+    snps_filtered_step1 = bcftools_filter_snps(snp_ch, filter_expressions.snp_filter_expr, "snps")
+    indels_filtered_step1 = bcftools_filter_indels(indel_ch, filter_expressions.indel_filter_expr, "indels")
 
     // Prepare depth cutoff channel for filtering: reformat to put sample_id at the right position for joining
     depth_cutoffs_for_filter = depth_cutoffs
