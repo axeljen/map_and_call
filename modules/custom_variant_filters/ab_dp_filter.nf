@@ -6,7 +6,7 @@ process ab_dp_filter {
     //publishDir "${params.outdir}/ab_dp_filtered_vcf_files", mode: 'copy'
 
     input:
-    tuple val(sample), val(region_id), val(region), val(callable_regions),path(vcf), path(csi), val(min_depth), val(max_depth), val(sex_assignment)
+    tuple val(sample), val(region_id), val(region), path(callable_regions), path(vcf), path(csi), val(min_depth), val(max_depth), val(sex_assignment)
     val sex_linked_scaffolds
     val category
 
@@ -21,9 +21,9 @@ process ab_dp_filter {
     """
     # first run the vcf file through bcftools to remove uncallable regions and pull out the sample of interest
     # extract callable regions for the specific region
-    echo -e ${chrom}"\t"${start}"\t"${end} > ${sample}_${region_id}_regionstring.bed
+    echo -e "${chrom}\t${start}\t${end}" > ${sample}_${region_id}_regionstring.bed
     # and filter the bed file to only hold this region
-    bedtools intersect -a ${callable_regions} -b ${sample}_${region_id}_regionstring.bed > tmp && mv tmp ${region_id}_${sample}_callable.bed
+    bedtools intersect -a ${callable_regions} -b ${sample}_${region_id}_regionstring.bed > ${region_id}_${sample}_callable.bed.tmp && mv ${region_id}_${sample}_callable.bed.tmp ${region_id}_${sample}_callable.bed
 
 
     bcftools view -R ${region_id}_${sample}_callable.bed -s ${sample} -Oz ${vcf} |\
@@ -41,7 +41,7 @@ process ab_dp_filter {
     stub:
     """
     touch ${category}_${sample}_region-${region_id}.ab_dp_filtered.vcf.gz
-    touch ${category}_${sample}_region-${region_id}.ab_dp_filtered.vcf.gz
+    touch ${category}_${sample}_region-${region_id}.ab_dp_filtered.vcf.gz.csi
     """
 
 }
