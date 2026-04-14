@@ -334,11 +334,11 @@ workflow {
     // Reference genome
     ch_reference = channel.fromPath(params.reference, checkIfExists: true)
 
-    // =========================================================================
-    // RAW READS FASTQC
-    // =========================================================================
+    // ═══════════════════════════════════════════════════════════════════════════════
+    //                     1. PREPROCESSING QC: RAW READS
+    // ═══════════════════════════════════════════════════════════════════════════════
 
-    // fastqc on raw reads
+    // FastQC on raw (untrimmed) reads
     ch_raw_reads_for_qc = ch_input.modern.map { sample_id, lane, _datatype, r1, r2 ->
             [sample_id, lane, [r1, r2], 'raw_reads']
         }
@@ -357,25 +357,21 @@ workflow {
 
     multiqc_rawreads(ch_multiqc_input)
 
-    // =========================================================================
-    // PREPROCESSING MODERN SAMPLES
-    // =========================================================================
+    // ═══════════════════════════════════════════════════════════════════════════════
+    //                  2. READ PREPROCESSING & TRIMMING
+    // ═══════════════════════════════════════════════════════════════════════════════
 
+    // Trim modern reads with fastp (quality and adapter trimming)
     fastp(ch_input.modern)
 
-    // =========================================================================
-    // PREPROCESSING HISTORICAL SAMPLES
-    // =========================================================================
-
-    // Push through adapterremoval
+    // Trim historical reads with AdapterRemoval (handles ancient DNA damage removal)
     adapterremoval(ch_input.historical)
 
+    // ═══════════════════════════════════════════════════════════════════════════════
+    //                  3. PREPROCESSING QC: CLEAN READS
+    // ═══════════════════════════════════════════════════════════════════════════════
 
-    // =========================================================================
-    // POST-PROCESSING FASTQC
-    // =========================================================================
-
-    // qc the clean reads too
+    // FastQC on trimmed reads
     fastqc_cleanreads(
         fastp.out.reads
             .map { sample_id, lane, _datatype, r1, r2 ->
@@ -395,11 +391,11 @@ workflow {
         .map { zips -> tuple(zips, 'clean_reads') }
         )
 
-    // =========================================================================
-    // INDEX REFERENCE GENOME AND PROCESS SCAFFOLD LIST AND CREATE INTERVALS
-    // ========================================================================
+    // ═══════════════════════════════════════════════════════════════════════════════
+    //              4. REFERENCE GENOME PREPARATION & INDEXING
+    // ═══════════════════════════════════════════════════════════════════════════════
 
-    // First index the reference genome
+    // Index reference genome and create intervals for parallel processing
     bwa_index_ch = bwa_index(ch_reference)
     faidx_and_chunks_ch = samtools_index(ch_reference)
     reference_fai = faidx_and_chunks_ch.reference_fai.first()
@@ -440,12 +436,11 @@ workflow {
             }
 
 
-    // =========================================================================
-    // MAP MODERN SAMPLES
-    // =========================================================================
+    // ═══════════════════════════════════════════════════════════════════════════════
+    //                    5. MAPPING: MODERN SAMPLES
+    // ═══════════════════════════════════════════════════════════════════════════════
 
-    
-    // combine reads with indexed reference
+    // Map trimmed modern reads to reference
     mapping_ch = fastp.out.reads
         .map { sample_id, lane, _datatype, r1, r2 -> tuple(sample_id, lane, r1, r2) }
         .combine(bwa_index_ch.reference)
@@ -457,9 +452,9 @@ workflow {
         error "Unsupported mapper specified: ${params.mapper}. Currently only 'bwa_mem' is supported."
     }
 
-    // =========================================================================
-    // Handle reference genome
-    // =========================================================================
+    // ═══════════════════════════════════════════════════════════════════════════════
+    //                    6. MAPPING: HISTORICAL SAMPLES
+    // ═══════════════════════════════════════════════════════════════════════════════
 
     refintervals_ch = reference_intervals
         .map { row -> row?.trim() }
@@ -470,11 +465,17 @@ workflow {
             intervals.withIndex().collect { interval, idx -> tuple(idx + 1, interval) }
         }
 
-    // =========================================================================
-    // MAP HISTORICAL SAMPLES
-    // =========================================================================
+    // Handle genomic intervals for variant calling
+    refintervals_ch = reference_intervals
+        .map { row -> row?.trim() }
+        .flatMap { row -> row ? row.split(/\r?\n/) as List : [] }
+        .filter { row -> row }
+        .collect()
+        .flatMap { intervals ->
+            intervals.withIndex().collect { interval, idx -> tuple(idx + 1, interval) }
+        }
 
-    // same for historical samples
+    // Map paired-end reads from historical samples
     map_historical_pairs_ch = adapterremoval.out.trimmed_reads
         .map { sample_id, lane, r1, r2, _collapsed, _singletons -> tuple(sample_id, lane, r1, r2) }
         .combine(bwa_index_ch.reference)
@@ -503,9 +504,11 @@ workflow {
 
     historical_bams_merged_ch = merge_historical_bams(historical_bam_ch)
 
-    // ========================================================================
-    //  if any sample was split across lanes, merge bams here
-    // ========================================================================
+    // ═══════════════════════════════════════════════════════════════════════════════
+    //            7. BAM POST-PROCESSING: MERGING & DEDUPLICATION
+    // ═══════════════════════════════════════════════════════════════════════════════
+
+    // Merge BAMs from samples split across multiple sequencing lanes
 
     // clean up bamchannel a bit and combine with historical bam channel
     datatypes_ch = ch_input.modern
@@ -547,9 +550,7 @@ workflow {
         .mix(singles_ch)
         .set( {final_bam_ch} )
     
-    // =========================================================================
-    // Deduplicate bam files
-    // =========================================================================
+    // Mark and remove optical/PCR duplicates from BAM files
 
     // add reference path to final_bam_ch
     final_bam_ch = final_bam_ch
@@ -561,9 +562,9 @@ workflow {
     
     dedup_bam_ch = samtools_markdups(final_bam_ch.map { sample_id, bam, _datatype, reference -> tuple(sample_id, bam, reference) })
 
-    // =========================================================================
-    // If historical samples, run these through damage profiler with rescaling
-    // =========================================================================
+    // ═══════════════════════════════════════════════════════════════════════════════
+    //        8. ANCIENT DNA ANALYSIS: DAMAGE PROFILING & RESCALING
+    // ═══════════════════════════════════════════════════════════════════════════════
 
     // add datatype back to dedupped maps
     historical_bams = dedup_bam_ch.bam
@@ -574,9 +575,7 @@ workflow {
 
     rescaled_bams = damage_profiler(historical_bams.map { sample_id, cram, crai, _datatype -> tuple(sample_id, cram, crai) }, ch_reference)
 
-    // =========================================================================
-    // Combine the rescaled bam with the deduplicated, modern ones, which will be our final crams
-    // =========================================================================
+    // Combine rescaled historical BAMs with deduplicated modern BAMs for unified downstream processing
 
     dedup_bam_ch.bam
         .combine(datatypes_ch, by: 0)
@@ -585,17 +584,15 @@ workflow {
         .mix(rescaled_bams.rescaled_bam)
         .set { final_bam_ch }
 
-    // =========================================================================
-    // Bam/cram qc
-    // =========================================================================
+    // ═══════════════════════════════════════════════════════════════════════════════
+    //              9. MAPPING QC: BAM QUALITY ASSESSMENT
+    // ═══════════════════════════════════════════════════════════════════════════════
     
     qualimap(final_bam_ch)
 
-    // =========================================================================
-    // Depth calculation for downstream filtering and possibly sex assignment
-    // =========================================================================
-    // Calculate average mapping depth per sample 
-    // =========================================================================
+    // ═══════════════════════════════════════════════════════════════════════════════
+    //       10. DEPTH PROFILING & SEX ASSIGNMENT FOR FILTERING
+    // ═══════════════════════════════════════════════════════════════════════════════
 
     bams_for_calling_ch = final_bam_ch
 
@@ -714,10 +711,13 @@ workflow {
 
 
 
-    // =========================================================================
-    // Parse populations for joint calling if specified
-    // =========================================================================
+    // ═══════════════════════════════════════════════════════════════════════════════
+    //           11. VARIANT CALLING: SAMPLE & POPULATION SETUP
+    // ═══════════════════════════════════════════════════════════════════════════════
+
+    // Parse population assignments for joint genotyping (if provided)
     // if a popfile was provided, get this info
+ // Parse population file for joint calling if available
     if (params.popfile) {
         pops = channel.fromPath(params.popfile, checkIfExists: true)
             .splitCsv(header: false, sep: ";")
@@ -760,16 +760,15 @@ workflow {
     // else if freebays is our caller, combine all bams into a single channel and send the pops along to freebayes later on
     
     
-    // // ========================================================================= \\
-    // // ######################################################################### \\
-    // //                              Variant calling
-    // // ######################################################################### \\
-    // // ========================================================================= \\
-
-    // // Variant calling can be made with four different routes, see below.        \\
-    // // The output of all of these routes will be the same: One vcf file per      \\
-    // // that has been combined across all samples. This is what we will later     \\
-    // // feed into the filter steps.                                               \\
+    // ═══════════════════════════════════════════════════════════════════════════════
+    //             12. VARIANT CALLING: MULTI-CALLER SUPPORT
+    // 
+    // Supports four different variant calling approaches:
+    //   - bcftools mpileup: Fast, lightweight variant discovery
+    //   - freebayes: Joint calling across all samples
+    //   - gatk_haplotypecaller: Per-sample calling (commented out)
+    //   - gatk_joint: Joint calling with GVCFs (commented out)
+    // ═══════════════════════════════════════════════════════════════════════════════
 
     if ( !['gatk_joint','gatk_haplotypecaller','freebayes','bcftools'].contains(params.variant_caller) ) {
         error "Unsupported variant caller specified: ${params.variant_caller}. Must be one of gatk_joint, gatk_haplotypecaller, freebayes or bcftools."
@@ -794,9 +793,7 @@ workflow {
         bams_for_calling_ch.combine(ref_bundle_ch)
         .combine(refintervals_ch)
 
-    // // ========================================================================= \\
-    // // Bcf-tools mpileup
-    // // ========================================================================= \\
+    // Call variants using selected variant caller
 
     if (params.variant_caller == 'bcftools') {
         mpileup(varcall_ch)
