@@ -1,47 +1,80 @@
 #!/usr/bin/env nextflow
 
-// Import modules
+// ═══════════════════════════════════════════════════════════════════════════════
+//                          MODULE IMPORTS
+//
+// Modules are organized by functional category for clarity and maintainability.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ─────────────────────────────────────────────────────────────────────────────
+// QC & Preprocessing Modules
+// ─────────────────────────────────────────────────────────────────────────────
 include { fastqc as fastqc_rawreads } from './modules/fastqc/fastqc_process'
 include { fastqc as fastqc_cleanreads } from './modules/fastqc/fastqc_process'
 include { multiqc_fastqc as multiqc_rawreads } from './modules/multiqc/multiqc_fastqc'
 include { multiqc_fastqc as multiqc_cleanreads} from './modules/multiqc/multiqc_fastqc'
 include { fastp } from './modules/fastp/trimming'
 include { adapterremoval } from './modules/adapterremoval/adapterremoval'
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Read Mapping & Alignment Modules
+// ─────────────────────────────────────────────────────────────────────────────
 include { bwa_index } from './modules/bwa/bwa_index'
 include { bwa_mem } from './modules/bwa/bwa_mem'
 include { bwa_mem as map_historical } from './modules/bwa/bwa_mem'
 include { bwa_mem_singlereads as map_merged } from './modules/bwa/bwa_mem'
 include { bwa_mem_singlereads as map_singletons } from './modules/bwa/bwa_mem'
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Mapping QC & Analysis Modules
+// ─────────────────────────────────────────────────────────────────────────────
 include { damage_profiler } from './modules/mapdamage/damageprofiler'
-include { samtools_stats } from './modules/samtools/samtools_stats'
+include { qualimap } from './modules/qualimap/qualimap'
+include { qualimap as qualimap_pre_dedup } from './modules/qualimap/qualimap'
+include { qualimap as qualimap_downsampled } from './modules/qualimap/qualimap'
+include { cramqc } from './modules/samtools/cramqc'
+include { multiqc_cram as cram_multiqc } from './modules/multiqc/multiqc_cram'
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BAM Processing & Analysis Modules
+// ─────────────────────────────────────────────────────────────────────────────
+include { samtools_index } from './modules/samtools/index_reference'
 include { samtools_merge } from './modules/samtools/mergebams'
 include { samtools_merge as merge_historical_bams } from './modules/samtools/mergebams'
+include { samtools_markdups } from './modules/samtools/samtools_markdups'
+include { samtools_stats } from './modules/samtools/samtools_stats'
 include { samtools_dp } from './modules/samtools/samtools_dp_process'
 include { samtools_dp as samtools_dp_downsampled } from './modules/samtools/samtools_dp_process'
 include { samtools_dp as xlinked_dp } from './modules/samtools/samtools_dp_process'
 include { samtools_dp as ylinked_dp } from './modules/samtools/samtools_dp_process'
 include { parse_region_depths } from './modules/samtools/parse_region_depths'
 include { parse_region_depths as parse_region_depths_downsampled } from './modules/samtools/parse_region_depths'
-include { gatk_mark_duplicates } from './modules/gatk/gatk_mark_duplicates'
-include { samtools_markdups } from './modules/samtools/samtools_markdups'
-include { cramqc } from './modules/samtools/cramqc'
-include { qualimap } from './modules/qualimap/qualimap'
-include { qualimap as qualimap_pre_dedup } from './modules/qualimap/qualimap'
-include { qualimap as qualimap_downsampled } from './modules/qualimap/qualimap'
-include { multiqc_cram as cram_multiqc } from './modules/multiqc/multiqc_cram'
-include { samtools_index } from './modules/samtools/index_reference'
 include { samtools_downsample } from './modules/samtools/samtools_downsample'
+include { gatk_mark_duplicates } from './modules/gatk/gatk_mark_duplicates'
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Reference Preparation Modules
+// ─────────────────────────────────────────────────────────────────────────────
 include { dochunks } from './modules/reference_intervals/dochunks'
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Variant Calling Modules
+// ─────────────────────────────────────────────────────────────────────────────
 include { mpileup } from './modules/bcftools/bcftools_mpileup'
 include { freebayes } from './modules/freebayes/freebayes'
+// NOTE: GATK HaplotypeCaller modules are available but currently unused in workflow:
+// include { create_sequence_dict } from './modules/gatk/create_sequence_dict'
+// include { haplotype_caller } from './modules/gatk/haplotype_caller'
+// include { haplotype_caller_erc } from './modules/gatk/haplotype_caller_erc'
+// include { combine_gvcfs } from './modules/gatk/combine_gvcfs'
+// include { genotype_gvcfs_combined as genotype_gvcfs } from './modules/gatk/genotype_gvcfs_combined'
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Variant Filtering & Transformation Modules
+// ─────────────────────────────────────────────────────────────────────────────
 include { bcftools_merge } from './modules/bcftools/bcftools_merge'
 include { bcftools_merge as bcftools_merge_snps } from './modules/bcftools/bcftools_merge'
 include { bcftools_merge as bcftools_merge_indels } from './modules/bcftools/bcftools_merge'
-include { create_sequence_dict } from './modules/gatk/create_sequence_dict'
-include { haplotype_caller } from './modules/gatk/haplotype_caller'
-include { haplotype_caller_erc } from './modules/gatk/haplotype_caller_erc'
-include { combine_gvcfs } from './modules/gatk/combine_gvcfs'
-include { genotype_gvcfs_combined as genotype_gvcfs } from './modules/gatk/genotype_gvcfs_combined'
 include { bcftools_concat as bcftools_concat_raw } from './modules/bcftools/bcftools_concat'
 include { bcftools_concat as bcftools_concat_snps } from './modules/bcftools/bcftools_concat'
 include { bcftools_concat as bcftools_concat_indels } from './modules/bcftools/bcftools_concat'
@@ -57,11 +90,23 @@ include { bcftools_filter_fmiss_maf as bcftools_filter_fmiss_maf_snps } from './
 include { bcftools_filter_fmiss_maf as bcftools_filter_fmiss_maf_indels } from './modules/bcftools/bcftools_filter_fmiss_maf'
 include { ab_dp_filter as ab_dp_filter_snps } from './modules/custom_variant_filters/ab_dp_filter'
 include { ab_dp_filter as ab_dp_filter_indels } from './modules/custom_variant_filters/ab_dp_filter'
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Region Masking & Callable Site Modules
+// ─────────────────────────────────────────────────────────────────────────────
 include { callable_regions } from './modules/bedtools/callable_regions'
 include { combine_bedfiles } from './modules/bedtools/combine_bedfiles'
 include { combine_bedfiles as combine_homref } from './modules/bedtools/combine_bedfiles'
 include { mappability_filter } from './modules/bedtools/mappability_filter'
 include { mappability_filter as indel_mappability_filter } from './modules/bedtools/mappability_filter'
+include { finalize_masks } from './modules/bedtools/finalize_masks'
+include { combine_bedfiles as combine_homref_invariants } from './modules/bedtools/combine_bedfiles'
+include { combine_bedfiles as combine_mappability_masks } from './modules/bedtools/combine_bedfiles'
+include { combine_bedfiles as combine_mappability_masks_snps } from './modules/bedtools/combine_bedfiles'
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Variant & Summary Statistics Modules
+// ─────────────────────────────────────────────────────────────────────────────
 include { vcf_stats as raw_vcf_stats } from './modules/variant_stats/vcf_stats_process'
 include { combine_stats as combine_raw_vcf_stats } from './modules/variant_stats/combine_stats'
 include { vcf_stats as filtered_snp_stats } from './modules/variant_stats/vcf_stats_process'
@@ -70,10 +115,14 @@ include { combine_stats as combine_filtered_snps_stats } from './modules/variant
 include { combine_stats as combine_filtered_indels_stats } from './modules/variant_stats/combine_stats'
 include { parse_summary_stats } from './modules/summary_stats/parse_summary_stats'
 include { combine_summary_tables } from './modules/summary_stats/combine_summary_files'
-include { finalize_masks } from './modules/bedtools/finalize_masks'
-include { combine_bedfiles as combine_homref_invariants } from './modules/bedtools/combine_bedfiles'
-include { combine_bedfiles as combine_mappability_masks } from './modules/bedtools/combine_bedfiles'
-include { combine_bedfiles as combine_mappability_masks_snps } from './modules/bedtools/combine_bedfiles'
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//                      UTILITY FUNCTIONS & HELPERS
+//
+// These helper functions provide reusable logic for common workflow operations.
+// ═══════════════════════════════════════════════════════════════════════════════
+
 /*
  * Parse input metadata CSV
  * Expected format: sample_id;taxon;read_1;read_2
@@ -629,16 +678,7 @@ workflow {
         // add the sample bedfile to this one
         .combine(parse_region_depths.out.sample_depth_beds, by: 0)
 
-
-    depth_cutoffs.view {
-        cutoffs -> "Depth cotuffs ${cutoffs}"
-    }
-
     mappability_mask = callable_regions(depth_cutoffs, sex_limited_contigs, non_sex_limited_contigs, reference_fai)
-    
-    mappability_mask.view {
-        mask -> "Mappability mask ${mask}"
-    }
 
 
 
