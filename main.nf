@@ -113,7 +113,9 @@ include { vcf_stats as filtered_snp_stats } from './modules/variant_stats/vcf_st
 include { vcf_stats as filtered_indel_stats } from './modules/variant_stats/vcf_stats_process'
 include { combine_stats as combine_filtered_snps_stats } from './modules/variant_stats/combine_stats'
 include { combine_stats as combine_filtered_indels_stats } from './modules/variant_stats/combine_stats'
-include { plot_variant_stats } from './modules/variant_stats/plot_variant_stats'
+include { plot_variant_stats as plot_raw_stats } from './modules/variant_stats/plot_variant_stats'
+include { plot_variant_stats as plot_snp_stats } from './modules/variant_stats/plot_variant_stats'
+include { plot_variant_stats as plot_indel_stats } from './modules/variant_stats/plot_variant_stats'
 include { parse_summary_stats } from './modules/summary_stats/parse_summary_stats'
 include { combine_summary_tables } from './modules/summary_stats/combine_summary_files'
 
@@ -928,7 +930,7 @@ workflow {
     )
 
     // Generate variant statistics PDF report for raw variants
-    plot_variant_stats(combined_raw_stats.combined_summary_statistics.collect(), 'raw_variants')
+    plot_raw_stats(combined_raw_stats.combined_summary_statistics.collect(), 'raw_variants')
 
     // If raw vcfs are to be stored, concatenate here
     if (params.store_raw_vcf == true) {
@@ -1047,8 +1049,8 @@ workflow {
     )
 
     // Generate variant statistics PDF reports for filtered SNPs and indels
-    plot_variant_stats(combined_stats_snps.combined_summary_statistics.collect(), 'filtered_snps')
-    plot_variant_stats(combined_stats_indels.combined_summary_statistics.collect(), 'filtered_indels')
+    plot_snp_stats(combined_stats_snps.combined_summary_statistics.collect(), 'filtered_snps')
+    plot_indel_stats(combined_stats_indels.combined_summary_statistics.collect(), 'filtered_indels')
 
     // Helper function to sort VCF channel by region_id and extract sorted file lists
     // Sort SNP and indel VCFs by region for concatenation in consistent order
@@ -1181,11 +1183,17 @@ workflow {
     snpable_regions = snp_mask.bedfile
     invariant_calls = homrefs.bedfile
 
+    // raw variant stats
+    raw_variant_stats = combined_raw_stats.combined_summary_statistics
+    raw_vcf_stats_plot = plot_raw_stats.out.report
+
     // filtered snp and indel stats
     filtered_snps_stats = combined_stats_snps.combined_summary_statistics
+    filtered_snps_stats_plot = plot_snp_stats.out.report
     filtered_indel_stats = combined_stats_indels.combined_summary_statistics
+    filtered_indel_stats_plot = plot_indel_stats.out.report
 
-    raw_variant_stats = combined_raw_stats.combined_summary_statistics
+
 
     summary_statistics = combine_summary_tables.out.table
 
@@ -1230,18 +1238,23 @@ output {
         path "03_genotypes/00_raw_variants"
         enabled params.store_raw_vcf
     }
-
-    // coverage_beds {
-    //     path "03_callable_regions/coverage_beds"
-    // }
+    raw_variant_stats {
+        path "00_reports/02_variantstats/00_raw_variants"
+    }
+    raw_vcf_stats_plot {
+        path "00_reports/02_variantstats/00_raw_variants"
+    }
     filtered_snps_stats {
+        path "00_reports/02_variantstats/01_filtered_snps"
+    }
+    filtered_snps_stats_plot {
         path "00_reports/02_variantstats/01_filtered_snps"
     }
     filtered_indel_stats {
         path "00_reports/02_variantstats/02_filtered_indels"
     }
-    raw_variant_stats {
-        path "00_reports/02_variantstats/00_raw_variants"
+    filtered_indel_stats_plot {
+        path "00_reports/02_variantstats/02_filtered_indels"
     }
     callable_regions {
         path "03_genotypes/02_maskfiles"
