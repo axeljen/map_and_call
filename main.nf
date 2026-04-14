@@ -255,15 +255,17 @@ def get_filter_expressions(caller_type, custom_snp=null, custom_indel=null) {
     }
     
     // Otherwise, return defaults based on variant caller
-    switch(caller_type) {
-        case ['gatk_joint', 'gatk_haplotypecaller']:
-            return [snp_filter_expr: params.snp_filter_expression_gatk, indel_filter_expr: params.indel_filter_expression_gatk]
-        case 'freebayes':
-            return [snp_filter_expr: params.snp_filter_expression_freebayes, indel_filter_expr: params.indel_filter_expression_freebayes]
-        case 'bcftools':
-            return [snp_filter_expr: params.snp_filter_expression_bcftools, indel_filter_expr: params.indel_filter_expression_bcftools]
-        default:
-            error "Unknown variant caller for filter expression: ${caller_type}"
+    if (caller_type in ['gatk_joint', 'gatk_haplotypecaller']) {
+        return [snp_filter_expr: params.snp_filter_expression_gatk, indel_filter_expr: params.indel_filter_expression_gatk]
+    }
+    else if (caller_type == 'freebayes') {
+        return [snp_filter_expr: params.snp_filter_expression_freebayes, indel_filter_expr: params.indel_filter_expression_freebayes]
+    }
+    else if (caller_type == 'bcftools') {
+        return [snp_filter_expr: params.snp_filter_expression_bcftools, indel_filter_expr: params.indel_filter_expression_bcftools]
+    }
+    else {
+        error "Unknown variant caller for filter expression: ${caller_type}"
     }
 }
 
