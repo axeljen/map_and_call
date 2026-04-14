@@ -1128,72 +1128,61 @@ workflow {
     snps_filtered_step1 = bcftools_filter_snps(snp_ch, snp_filter_expr, "snps")
     indels_filtered_step1 = bcftools_filter_indels(indel_ch, indel_filter_expr, "indels")
 
-    
-    // Combine callable regions with region strings and associated, vcf files, and sample per sample on coverage and allele balance
-    ab_dp_filter_snps(refintervals_ch
+    // Prepare depth cutoff channel for filtering: reformat to put sample_id at the right position for joining
+    depth_cutoffs_for_filter = depth_cutoffs
+        .map {
+            sample_id, min_dp, max_dp, sex_assignment, _depths ->
+                tuple (min_dp, max_dp, sample_id, sex_assignment)
+        }
+
+    // Build SNP filtering input: combine intervals, callable regions, filtered SNPs, and depth cutoffs
+    snps_filter_input = refintervals_ch
         .combine(callable_regions.out.callable)
         .combine(snps_filtered_step1, by: 0)
-        .combine(depth_cutoffs
-            .map {
-                sample_id, min_dp, max_dp, sex_assignment, _depths ->
-                    tuple (min_dp, max_dp, sample_id, sex_assignment)
-            }, by: 2)
+        .combine(depth_cutoffs_for_filter, by: 2)
         .map {
             sample_id, region_id, region, bedfile, vcf, idx, min_depth, max_depth, sex_assignment ->
-                tuple(sample_id, region_id, region, bedfile, vcf, idx, min_depth,
-                max_depth, sex_assignment)
-        }, sex_limited_contigs,
-        'snps')
-    
-    ab_dp_filter_indels(refintervals_ch
+                tuple(sample_id, region_id, region, bedfile, vcf, idx, min_depth, max_depth, sex_assignment)
+        }
+
+    ab_dp_filter_snps(snps_filter_input, sex_limited_contigs, 'snps')
+
+    // Build indel filtering input: same structure as SNPs
+    indels_filter_input = refintervals_ch
         .combine(callable_regions.out.callable)
         .combine(indels_filtered_step1, by: 0)
-        .combine(depth_cutoffs
-            .map {
-                sample_id, min_dp, max_dp, sex_assignment, _depths ->
-                    tuple (min_dp, max_dp, sample_id, sex_assignment)
-            }, by: 2)
+        .combine(depth_cutoffs_for_filter, by: 2)
         .map {
             sample_id, region_id, region, bedfile, vcf, idx, min_depth, max_depth, sex_assignment ->
-                tuple(sample_id, region_id, region, bedfile, vcf, idx, min_depth,
-                max_depth, sex_assignment)
-        }, sex_limited_contigs,
-        'indels')
+                tuple(sample_id, region_id, region, bedfile, vcf, idx, min_depth, max_depth, sex_assignment)
+        }
+
+    ab_dp_filter_indels(indels_filter_input, sex_limited_contigs, 'indels')
 
     // merge samples together
-    snps_to_merge = ab_dp_filter_snps.out.ab_dp_filtered_vcf
-        .groupTuple(by: 0)
-        .map {
-            // sort samples by sample id to ensure consistent order for merging
-            region_id, samples, vcfs, idxs ->
-                def zipped = [samples, vcfs, idxs].transpose()
-                    .sort { a, b -> a[0] <=> b[0] }  // sort by sample_id
-                def (samples_sorted, vcfs_sorted, idxs_sorted) = zipped.transpose()
-                tuple(region_id, samples_sorted, vcfs_sorted, idxs_sorted)
-        }
-        .combine(samtools_index.out.reference_fasta)
-        .combine(samtools_index.out.reference_fai)
-        .combine(samtools_index.out.reference_gzi)
-        .map { region_id, samples, vcfs, idxs, reference_fasta, reference_fai, reference_gzi ->
-            tuple(region_id, samples, vcfs, idxs, reference_fasta, reference_fai, reference_gzi)
-        }
+    // Helper function to prepare variant channel for merging: group by region, sort samples, add reference files
+    def prepare_merge_input(filtered_vcf_channel) {
+        return filtered_vcf_channel
+            .groupTuple(by: 0)
+            .map {
+                region_id, samples, vcfs, idxs ->
+                    // Sort samples by ID to ensure consistent order for reproducible merging
+                    def zipped = [samples, vcfs, idxs].transpose()
+                        .sort { a, b -> a[0] <=> b[0] }
+                    def (samples_sorted, vcfs_sorted, idxs_sorted) = zipped.transpose()
+                    tuple(region_id, samples_sorted, vcfs_sorted, idxs_sorted)
+            }
+            .combine(samtools_index.out.reference_fasta)
+            .combine(samtools_index.out.reference_fai)
+            .combine(samtools_index.out.reference_gzi)
+            .map { region_id, samples, vcfs, idxs, reference_fasta, reference_fai, reference_gzi ->
+                tuple(region_id, samples, vcfs, idxs, reference_fasta, reference_fai, reference_gzi)
+            }
+    }
 
-    indels_to_merge = ab_dp_filter_indels.out.ab_dp_filtered_vcf
-        .groupTuple(by: 0)
-        .map {
-            // sort samples by sample id to ensure consistent order for merging
-            region_id, samples, vcfs, idxs ->
-                def zipped = [samples, vcfs, idxs].transpose()
-                    .sort { a, b -> a[0] <=> b[0] }  // sort by sample_id
-                def (samples_sorted, vcfs_sorted, idxs_sorted) = zipped.transpose()
-                tuple(region_id, samples_sorted, vcfs_sorted, idxs_sorted)
-        }
-        .combine(samtools_index.out.reference_fasta)
-        .combine(samtools_index.out.reference_fai)
-        .combine(samtools_index.out.reference_gzi)
-        .map { region_id, samples, vcfs, idxs, reference_fasta, reference_fai, reference_gzi ->
-            tuple(region_id, samples, vcfs, idxs, reference_fasta, reference_fai, reference_gzi)
-        }
+    // Prepare SNP and indel channels for merging with consistent format
+    snps_to_merge = prepare_merge_input(ab_dp_filter_snps.out.ab_dp_filtered_vcf)
+    indels_to_merge = prepare_merge_input(ab_dp_filter_indels.out.ab_dp_filtered_vcf)
     
     bcftools_merge_snps(snps_to_merge, 'snps')
     bcftools_merge_indels(indels_to_merge, 'indels')
@@ -1224,33 +1213,28 @@ workflow {
         'filtered_indels'
     )
 
-    //bcftools_merge_snps.out.vcf.view()
-
-    sorted_snps = bcftools_merge_snps.out.vcf
-            .toSortedList { a, b -> a[0] <=> b[0] }  // Sort by region_id
+    // Helper function to sort VCF channel by region_id and extract sorted file lists
+    def sort_and_extract_vcfs(vcf_channel) {
+        return vcf_channel
+            .toSortedList { a, b -> a[0] <=> b[0] }  // Sort by region_id for deterministic output
             .map { sorted_list ->
-                // Extract VCFs and indices in sorted order
                 def vcfs = sorted_list.collect { it[1] }
                 def idxs = sorted_list.collect { it[2] }
                 tuple(vcfs, idxs)
             }
+    }
 
-    // concatenate filtered snps and indels
+    // Sort SNP and indel VCFs by region for concatenation in consistent order
+    sorted_snps = sort_and_extract_vcfs(bcftools_merge_snps.out.vcf)
+    sorted_indels = sort_and_extract_vcfs(bcftools_merge_indels.out.vcf)
+
+    // Concatenate filtered SNPs and indels into genome-wide VCFs
     bcftools_concat_snps(sorted_snps, 'filtered_snps')
-
-    sorted_indels = bcftools_merge_indels.out.vcf
-            .toSortedList { a, b -> a[0] <=> b[0] }  // Sort by region_id
-            .map { sorted_list ->
-                // Extract VCFs and indices in sorted order
-                def vcfs = sorted_list.collect { it[1] }
-                def idxs = sorted_list.collect { it[2] }
-                tuple(vcfs, idxs)
-            }
-
     bcftools_concat_indels(sorted_indels, 'filtered_indels')
 
-    // finalize a bunch of different mask files, which may be useful downstram
-    refintervals_ch
+    // finalize a bunch of different mask files, which may be useful downstream
+    // Prepare input for mask finalization: combine regions, callable sites, and variant VCFs for ALL samples
+    finalize_masks_input = refintervals_ch
         .combine(callable_regions.out.callable)
         .combine(bcftools_merge_snps.out.vcf, by: 0)
         .combine(bcftools_merge_indels.out.vcf, by: 0)
@@ -1258,15 +1242,10 @@ workflow {
             region_id, region, sample_id, callable_bed, snp_vcf, _snp_idx, indel_vcf, _indel_idx ->
                 tuple(sample_id, region_id, region, callable_bed, snp_vcf, indel_vcf)
         }
-    region_masks = finalize_masks(refintervals_ch
-        .combine(callable_regions.out.callable)
-        .combine(bcftools_merge_snps.out.vcf, by: 0)
-        .combine(bcftools_merge_indels.out.vcf, by: 0)
-        .map {
-            region_id, region, sample_id, callable_bed, snp_vcf, _snp_idx, indel_vcf, _indel_idx ->
-                tuple(sample_id, region_id, region, callable_bed, snp_vcf, indel_vcf)
-        })
+
+    region_masks = finalize_masks(finalize_masks_input)
     
+    // Extract and group by sample for final merging
     region_homrefs = region_masks.homref_invariants
         .groupTuple(by: 0)
     region_totalmask = region_masks.mappability_mask
@@ -1274,7 +1253,7 @@ workflow {
     region_snpmask = region_masks.mappability_mask_snps
         .groupTuple(by: 0)
 
-    // concatenate and sort them for output
+    // Concatenate regional masks into genome-wide files for output
     homrefs = combine_homref_invariants(region_homrefs, reference_fai, 'homref_invariants')
     total_mask = combine_mappability_masks(region_totalmask, reference_fai, 'total_mask')
     snp_mask = combine_mappability_masks_snps(region_snpmask, reference_fai, 'snp_mask')
