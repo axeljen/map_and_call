@@ -609,6 +609,39 @@ workflow {
 
     bams_output = bams_for_calling_ch
 
+    // depending on the user parameter settings, set the coverage thresholds for custom DP filters
+    depth_cutoffs = sample_depths
+        .map { sample_id, autosomal_dp, _non_sex_limited_dp, _sex_limited_dp, _ratio, sex_assignment ->
+            if (params.min_depth instanceof Integer){
+                min_dp = params.min_depth
+            }
+            else {
+                min_dp = (autosomal_dp * params.min_depth)
+            }
+            if (params.max_depth instanceof Integer){
+                max_dp = params.max_depth
+            }
+            else {
+                max_dp = (autosomal_dp * params.max_depth)
+            }
+            tuple(sample_id, min_dp, max_dp, sex_assignment)
+        }
+        // add the sample bedfile to this one
+        .combine(parse_region_depths.out.sample_depth_beds, by: 0)
+
+
+    depth_cutoffs.view {
+        cutoffs -> "Depth cotuffs ${cutoffs}"
+    }
+
+    mappability_mask = callable_regions(depth_cutoffs, sex_limited_contigs, non_sex_limited_contigs, reference_fai)
+    
+    mappability_mask.view {
+        mask -> "Mappability mask ${mask}"
+    }
+
+
+
     // =========================================================================
     // Parse populations for joint calling if specified
     // =========================================================================
@@ -705,10 +738,8 @@ workflow {
             .collect().toList()
         varcall_ch = varcall_ch
             .combine(freebayes_pops)
-            .view()
         freebayes(varcall_ch)
         pop_vcfs_ch = freebayes.out.vcf
-        pop_vcfs_ch.view()
     }
 
     // Combine vcfs across populations/samples if there are more than one population
@@ -1057,27 +1088,6 @@ workflow {
     snps_filtered_step1 = bcftools_filter_snps(snp_ch, snp_filter_expr, "snps")
     indels_filtered_step1 = bcftools_filter_indels(indel_ch, indel_filter_expr, "indels")
 
-    // depending on the user parameter settings, set the coverage thresholds for custom DP filters
-    depth_cutoffs = sample_depths
-        .map { sample_id, autosomal_dp, non_sex_limited_dp, sex_limited_dp, ratio, sex_assignment ->
-            if (params.min_depth instanceof Integer){
-                min_dp = params.min_depth
-            }
-            else {
-                min_dp = (autosomal_dp * params.min_depth)
-            }
-            if (params.max_depth instanceof Integer){
-                max_dp = params.max_depth
-            }
-            else {
-                max_dp = (autosomal_dp * params.max_depth)
-            }
-            tuple(sample_id, min_dp, max_dp, sex_assignment)
-        }
-        // add the sample bedfile to this one
-        .combine(parse_region_depths.out.sample_depth_beds, by: 0)
-
-    mappability_mask = callable_regions(depth_cutoffs, sex_limited_contigs, non_sex_limited_contigs, reference_fai)
     
     // Combine callable regions with region strings and associated, vcf files, and sample per sample on coverage and allele balance
     ab_dp_filter_snps(refintervals_ch
