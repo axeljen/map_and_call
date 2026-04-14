@@ -1,7 +1,7 @@
 process plot_variant_stats {
     tag "plot_variant_stats_${category}"
     conda "${moduleDir}/environment.yml"
-    publishDir "${params.outdir}/04_variant_stats", mode: 'copy'
+    publishDir "${params.outdir}/${params.variant_caller}/00_reports/02_variantstats", mode: 'copy'
 
     input:
     path(stat_files)
