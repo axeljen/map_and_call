@@ -138,8 +138,13 @@ def parse_input(metadata_file) {
         .map { row ->
             def data_type = row.data_type
             def sample_id = row.sample_id
-            def read_1 = file(row.read_1, checkIfExists: true)
-            def read_2 = file(row.read_2, checkIfExists: true)
+            
+            // Construct read paths based on params.reads_dir
+            def read_1_path = params.reads_dir ? "${params.reads_dir}/${row.read_1}" : row.read_1
+            def read_2_path = params.reads_dir ? "${params.reads_dir}/${row.read_2}" : row.read_2
+            
+            def read_1 = file(read_1_path, checkIfExists: true)
+            def read_2 = file(read_2_path, checkIfExists: true)
             return [sample_id, data_type, read_1, read_2]
         }
         // add lane information if multiple entries per sample_id
@@ -591,8 +596,9 @@ workflow {
             return tuple(sample_id, bam, datatype, reference)
         }
     qualimap_pre_dedup(final_bam_ch.map { sample_id, bam, _datatype, reference -> tuple(sample_id, bam, reference) })
-    
     dedup_bam_ch = samtools_markdups(final_bam_ch.map { sample_id, bam, _datatype, reference -> tuple(sample_id, bam, reference) })
+
+    dedup_bam_ch.bam.view()
 
     // ═══════════════════════════════════════════════════════════════════════════════
     //        8. HISTORICAL DNA: DAMAGE PROFILING & RESCALING
@@ -619,7 +625,7 @@ workflow {
     // ═══════════════════════════════════════════════════════════════════════════════
     //              9. MAPPING QC: BAM QUALITY ASSESSMENT
     // ═══════════════════════════════════════════════════════════════════════════════
-    
+    final_bam_ch.view()
     qualimap(final_bam_ch)
 
     // ═══════════════════════════════════════════════════════════════════════════════
@@ -819,7 +825,7 @@ workflow {
             def bwa_indices = row[3..-1]
             tuple(reference, [fai, gzi] + bwa_indices)
         }
-
+    bams_for_calling_ch.view()
     varcall_ch = 
         bams_for_calling_ch.combine(ref_bundle_ch)
         .combine(refintervals_ch)
@@ -1026,6 +1032,7 @@ workflow {
     bcftools_fmiss_maf_filtered_snps = bcftools_filter_fmiss_maf_snps(bcftools_merge_snps.out.vcf, 'snps')
     bcftools_fmiss_maf_filtered_indels = bcftools_filter_fmiss_maf_indels(bcftools_merge_indels.out.vcf, 'indels')
     
+    bcftools_fmiss_maf_filtered_snps.vcf.view()
 
     // stats
     filtered_snp_stats_out = filtered_snp_stats(bcftools_fmiss_maf_filtered_snps, 'snps')
@@ -1156,17 +1163,16 @@ workflow {
     qualimap_downsampled_reports = qualimap_downsampled.out.qualimap_report
 
     // Deduplicated CRAM files and duplicate-marking metrics
-    cram_files   = bams_for_calling_ch
+    raw_crams = final_bam_ch
     cram_metrics = samtools_markdups.out.metrics
+
+    downsampled_cram_files = bams_for_calling_ch
 
     // Reference genome
     reference_genome = bwa_index.out.reference
 
     // downsampled bam files
-    downsampled_cram_files = bams_for_calling_ch
-        .map { sample_id, cram, crai ->
-            tuple(sample_id, cram, crai)
-        }
+    downsampled_cram_files = samtools_downsample.out.downsampled_bam
 
     // // Variant statistics (raw calls)
     // raw_vcf_stats = combine_raw_vcf_stats.out.combined_summary_statistics
@@ -1221,7 +1227,7 @@ output {
     reference_genome {
         path "01_reference_genome"
     }
-    cram_files {
+    raw_crams {
         path "02_cramfiles"
     }
     downsampled_cram_files {
@@ -1278,17 +1284,3 @@ output {
     }
 }
 
-/*
- * Completion handler
- */
-workflow.onComplete {
-    log.info """
-    ╔═══════════════════════════════════════════════════════════╗
-    ║                   Pipeline Complete                       ║
-    ╠═══════════════════════════════════════════════════════════╣
-    ║ Status    : ${workflow.success ? 'SUCCESS' : 'FAILED'}    ║
-    ║ Duration  : ${workflow.duration}                          ║
-    ║ Output    : ${params.outdir}                              ║
-    ╚═══════════════════════════════════════════════════════════╝
-    """.stripIndent()
-}
