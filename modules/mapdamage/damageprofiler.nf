@@ -11,7 +11,7 @@ process damage_profiler {
 
     output:
     tuple val(sample_id), path("${sample_id}_damage"), emit: damage_reports
-    tuple val(sample_id), path("${sample_id}.dedup.cram"), path("${sample_id}.dedup.cram.crai"), emit: rescaled_bam
+    tuple val(sample_id), path("${sample_id}.dp.dedup.cram"), path("${sample_id}.dp.dedup.cram.crai"), emit: rescaled_bam
 
     script:
     def rescale_arg = params.damageprofiler_rescale ? '--rescale' : ''
@@ -31,13 +31,13 @@ process damage_profiler {
     if [[ -f results_${sample_id}/*rescaled.bam ]]; then
         # if there is a rescaled bam, sort, convert to cram, and this will be the downstream bam
         samtools sort -@ ${task.cpus} -o ${sample_id}.sorted.bam results_${sample_id}/*rescaled.bam
-        samtools view -@ ${task.cpus} -C -T ${reference_genome} -o ${sample_id}.dedup.cram ${sample_id}.sorted.bam
-        samtools index ${sample_id}.dedup.cram
+        samtools view -@ ${task.cpus} -C -T ${reference_genome} -o ${sample_id}.dp.dedup.cram ${sample_id}.sorted.bam
+        samtools index ${sample_id}.dp.dedup.cram
         rm -f ${sample_id}.sorted.bam
     else
         # if there is no rescaled bam, just convert the original bam back to cram and use that as the downstream bam
-        samtools view -@ ${task.cpus} -C -T ${reference_genome} -o ${sample_id}.dedup.cram ${input_bam}
-        samtools index ${sample_id}.dedup.cram
+        samtools view -@ ${task.cpus} -C -T ${reference_genome} -o ${sample_id}.dp.dedup.cram ${input_bam}
+        samtools index ${sample_id}.dp.dedup.cram
     fi
 
     # move damage profiler results to a subdirectory with the sample name
@@ -48,7 +48,8 @@ process damage_profiler {
 
     stub:
     """
-    touch ${sample_id}.dedup.cram
-    
+    mkdir -p ${sample_id}_damage
+    touch ${sample_id}.dp.dedup.cram
+    touch ${sample_id}.dp.dedup.cram.crai
     """
 }
