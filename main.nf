@@ -1061,8 +1061,8 @@ workflow {
 
     // Helper function to sort VCF channel by region_id and extract sorted file lists
     // Sort SNP and indel VCFs by region for concatenation in consistent order
-    sorted_snps = sort_and_extract_vcfs(bcftools_merge_snps.out.vcf)
-    sorted_indels = sort_and_extract_vcfs(bcftools_merge_indels.out.vcf)
+    sorted_snps = sort_and_extract_vcfs(bcftools_fmiss_maf_filtered_snps.vcf)
+    sorted_indels = sort_and_extract_vcfs(bcftools_fmiss_maf_filtered_indels.vcf)
 
     // Concatenate filtered SNPs and indels into genome-wide VCFs
     bcftools_concat_snps(sorted_snps, 'filtered_snps')
