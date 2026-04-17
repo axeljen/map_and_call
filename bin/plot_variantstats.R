@@ -95,14 +95,23 @@ if (length(sample_file) > 0) {
 ```{r summary-stats}
 sample_data <- read_tsv("%s", show_col_types = FALSE)
 n_samples <- nrow(sample_data)
-total_genotypes <- sum(sample_data$num_records)
+# Get total sites from record_counts file
+sample_file_path <- "%s"
+record_counts_files <- list.files(dirname(sample_file_path), pattern = "_record_counts\\\\.tsv$", full.names = TRUE)
+if (length(record_counts_files) > 0) {
+  record_counts <- read_tsv(record_counts_files[1], show_col_types = FALSE)
+  total_sites <- sum(record_counts$count)
+} else {
+  # Fallback: use max num_records if record_counts not available
+  total_sites <- max(sample_data$num_records)
+}
 cat(sprintf("**Number of samples:** %%s\\n\\n", comma(n_samples)))
-cat(sprintf("**Sites in VCF:** %%s\\n\\n", comma(total_genotypes)))
+cat(sprintf("**Sites in VCF:** %%s\\n\\n", comma(total_sites)))
 ```
 
 ---
 
-', sample_file[1]))
+', sample_file[1], sample_file[1]))
 } else {
   rmd_content <- paste0(rmd_content, '
 # Summary

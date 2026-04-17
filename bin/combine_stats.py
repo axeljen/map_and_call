@@ -79,12 +79,19 @@ for file in sample_stats_files:
                 continue
             items = line.strip().split("\t")
             sample = items[0]
-            num_records = items[1]
-            num_hom_ref = items[2]
-            num_het = items[3]
-            num_hom_alt = items[4]
-            num_missing = items[5]
-            combined_sample_stats[sample] = {"num_records": num_records, "num_hom_ref": num_hom_ref, "num_het": num_het, "num_hom_alt": num_hom_alt, "num_missing": num_missing}
+            num_records = int(items[1])
+            num_hom_ref = int(items[2])
+            num_het = int(items[3])
+            num_hom_alt = int(items[4])
+            num_missing = int(items[5])
+            if sample not in combined_sample_stats:
+                combined_sample_stats[sample] = {"num_records": num_records, "num_hom_ref": num_hom_ref, "num_het": num_het, "num_hom_alt": num_hom_alt, "num_missing": num_missing}
+            else:
+                combined_sample_stats[sample]["num_records"] += num_records
+                combined_sample_stats[sample]["num_hom_ref"] += num_hom_ref
+                combined_sample_stats[sample]["num_het"] += num_het
+                combined_sample_stats[sample]["num_hom_alt"] += num_hom_alt
+                combined_sample_stats[sample]["num_missing"] += num_missing
             _samples.append(sample)
     if not set(_samples) == set(samples):
         raise ValueError(f"Samples in file {file} do not match samples in the first ab-dp file.")
@@ -139,7 +146,7 @@ with open(f"{args.output}_qual_fmiss_maf_dp.tsv", "w") as f:
 with open(f"{args.output}_sample_stats.tsv", "w") as f:
     f.write("sample\tnum_records\tnum_hom_ref\tnum_het\tnum_hom_alt\tnum_missing\n")
     for sample in samples:
-        f.write(sample + "\t" + combined_sample_stats[sample]["num_records"] + "\t" + combined_sample_stats[sample]["num_hom_ref"] + "\t" + combined_sample_stats[sample]["num_het"] + "\t" + combined_sample_stats[sample]["num_hom_alt"] + "\t" + combined_sample_stats[sample]["num_missing"] + "\n")
+        f.write(sample + "\t" + str(combined_sample_stats[sample]["num_records"]) + "\t" + str(combined_sample_stats[sample]["num_hom_ref"]) + "\t" + str(combined_sample_stats[sample]["num_het"]) + "\t" + str(combined_sample_stats[sample]["num_hom_alt"]) + "\t" + str(combined_sample_stats[sample]["num_missing"]) + "\n")
 with open(f"{args.output}_record_counts.tsv", "w") as f:
     f.write("record_type\tcount\n")
     for rec_type in combined_rec_counts:
