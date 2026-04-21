@@ -71,12 +71,10 @@ process bwa_mem_singlereads {
     conda "${moduleDir}/environment.yml"
 
     input:
-    tuple val(sample_id), val(lane), path(reads)
-    val(category)
-    tuple path(reference), path(reference_index)
+    tuple val(sample_id), val(lane), path(reads), path(reference), path(reference_index)
 
     output:
-    tuple val(sample_id), val(lane), path("${sample_id}_${lane}_${category}.sorted.bam"), path("${sample_id}_${lane}_${category}.sorted.bam.bai"), emit: bam
+    tuple val(sample_id), val(lane), path("${sample_id}_${lane}.sorted.bam"), path("${sample_id}_${lane}.sorted.bam.bai"), emit: bam
 
     script:
     """
@@ -115,14 +113,14 @@ process bwa_mem_singlereads {
          -R "\${rg}" \
          ${reference} \
          ${reads} \
-     | samtools sort -@ ${task.cpus} -o ${sample_id}_${lane}_${category}.sorted.bam -
+     | samtools sort -@ ${task.cpus} -o ${sample_id}_${lane}.sorted.bam -
 
-    samtools index ${sample_id}_${lane}_${category}.sorted.bam
+    samtools index ${sample_id}_${lane}.sorted.bam
     """
 
     stub:
     """
-    touch ${sample_id}_${lane}_${category}.sorted.bam
-    touch ${sample_id}_${lane}_${category}.sorted.bam.bai
+    touch ${sample_id}_${lane}.sorted.bam
+    touch ${sample_id}_${lane}.sorted.bam.bai
     """
 }
