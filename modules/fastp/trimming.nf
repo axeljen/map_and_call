@@ -28,7 +28,7 @@ process fastp {
         --trim_front2 ${params.trim_front} \
         --trim_tail1 ${params.trim_tail} \
         --trim_tail2 ${params.trim_tail} \
-        --length_required ${params.min_length} \
+        --length_required ${params.min_readlength} \
         --detect_adapter_for_pe \
         --thread ${task.cpus}
 
