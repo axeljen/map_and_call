@@ -8,11 +8,11 @@ process bwa_mem {
     conda "${moduleDir}/environment.yml"
 
     input:
-    tuple val(sample_id), val(lane), path(read1), path(read2), path(reference), path(reference_index)
+    tuple val(sample_id), val(library), val(datatype), path(read1), path(read2), path(reference), path(reference_index)
     
 
     output:
-    tuple val(sample_id), val(lane), path("${sample_id}_${lane}.sorted.bam"), path("${sample_id}_${lane}.sorted.bam.bai"), emit: bam
+    tuple val(sample_id), val(library), val(datatype), path("${sample_id}_${library}.sorted.bam"), path("${sample_id}_${library}.sorted.bam.bai"), emit: bam
 
     script:
     """
@@ -52,15 +52,15 @@ process bwa_mem {
          ${reference} \
          ${read1} \
          ${read2} \
-     | samtools sort -@ ${task.cpus} -o ${sample_id}_${lane}.sorted.bam -
+     | samtools sort -@ ${task.cpus} -o ${sample_id}_${library}.sorted.bam -
 
-    samtools index ${sample_id}_${lane}.sorted.bam
+    samtools index ${sample_id}_${library}.sorted.bam
     """
 
     stub:
     """
-    touch ${sample_id}_${lane}.sorted.bam
-    touch ${sample_id}_${lane}.sorted.bam.bai
+    touch ${sample_id}_${library}.sorted.bam
+    touch ${sample_id}_${library}.sorted.bam.bai
     """
 }
 
@@ -71,10 +71,10 @@ process bwa_mem_singlereads {
     conda "${moduleDir}/environment.yml"
 
     input:
-    tuple val(sample_id), val(lane), path(reads), path(reference), path(reference_index)
+    tuple val(sample_id), val(library), val(datatype), path(reads), path(reference), path(reference_index)
 
     output:
-    tuple val(sample_id), val(lane), path("${sample_id}_${lane}.sorted.bam"), path("${sample_id}_${lane}.sorted.bam.bai"), emit: bam
+    tuple val(sample_id), val(library), val(datatype), path("${sample_id}_${library}_MR.sorted.bam"), path("${sample_id}_${library}_MR.sorted.bam.bai"), emit: bam
 
     script:
     """
@@ -106,21 +106,21 @@ process bwa_mem_singlereads {
     PU="\${FLOWCELL}.\${LANE}"
     SAMPLE="${sample_id}"
 
-    rg="@RG\\tID:\${RGID}\\tSM:\${SAMPLE}\\tLB:\${SAMPLE}\\tPL:\${PLATFORM}\\tPU:\${PU}"
+    rg="@RG\\tID:\${RGID}\\tSM:\${SAMPLE}\\tLB:${library}\\tPL:\${PLATFORM}\\tPU:\${PU}"
 
     bwa mem \
          -t ${task.cpus} \
          -R "\${rg}" \
          ${reference} \
          ${reads} \
-     | samtools sort -@ ${task.cpus} -o ${sample_id}_${lane}.sorted.bam -
+     | samtools sort -@ ${task.cpus} -o ${sample_id}_${library}_MR.sorted.bam -
 
-    samtools index ${sample_id}_${lane}.sorted.bam
+    samtools index ${sample_id}_${library}_MR.sorted.bam
     """
 
     stub:
     """
-    touch ${sample_id}_${lane}.sorted.bam
-    touch ${sample_id}_${lane}.sorted.bam.bai
+    touch ${sample_id}_${library}_MR.sorted.bam
+    touch ${sample_id}_${library}_MR.sorted.bam.bai
     """
 }

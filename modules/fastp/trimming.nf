@@ -8,12 +8,12 @@ process fastp {
     conda "${moduleDir}/environment.yml"
 
     input:
-    tuple val(sample_id), val(lane), val(datatype), path(read1), path(read2)
+    tuple val(sample_id), val(lane), val(datatype), val(library), path(read1), path(read2)
 
     output:
-    tuple val(sample_id), val(lane), val(datatype), path("${sample_id}_${lane}_trimmed_R1.fastq.gz"), path("${sample_id}_${lane}_trimmed_R2.fastq.gz"), emit: reads
-    tuple val(sample_id), val(lane), path("${sample_id}_${lane}.fastp.json"), emit: json
-    tuple val(sample_id), val(lane), path("${sample_id}_${lane}.fastp.html"), emit: html
+    tuple val(sample_id), val(lane), val(datatype), val(library), path("${sample_id}_${lane}_trimmed_R1.fastq.gz"), path("${sample_id}_${lane}_trimmed_R2.fastq.gz"), emit: reads
+    tuple val(sample_id), val(lane), val(datatype), val(library), path("${sample_id}_${lane}.fastp.json"), emit: json
+    tuple val(sample_id), val(lane), val(datatype), val(library), path("${sample_id}_${lane}.fastp.html"), emit: html
 
     script:
     """

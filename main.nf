@@ -15,6 +15,10 @@ include { multiqc_fastqc as multiqc_rawreads } from './modules/multiqc/multiqc_f
 include { multiqc_fastqc as multiqc_cleanreads} from './modules/multiqc/multiqc_fastqc'
 include { fastp } from './modules/fastp/trimming'
 include { adapterremoval } from './modules/adapterremoval/adapterremoval'
+include { clumpify_single } from './modules/bbmap/bbmap'
+include { clumpify_paired } from './modules/bbmap/bbmap'
+include { concat_reads } from './modules/concat_libs/concat_libs'
+include { concat_collapsed } from './modules/concat_libs/concat_libs'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Read Mapping & Alignment Modules
@@ -134,10 +138,11 @@ def parse_input(metadata_file) {
     return channel
         .fromPath(metadata_file)
         .splitCsv(header: true, sep: ';')
-        .filter { row -> !row.data_type.startsWith('#') }
+        .filter { row -> !row.sample_id.startsWith('#') }
         .map { row ->
             def data_type = row.data_type
             def sample_id = row.sample_id
+            def library = row.library
             
             // Construct read paths based on params.reads_dir
             def read_1_path = params.reads_dir ? "${params.reads_dir}/${row.read_1}" : row.read_1
@@ -145,18 +150,18 @@ def parse_input(metadata_file) {
             
             def read_1 = file(read_1_path, checkIfExists: true)
             def read_2 = file(read_2_path, checkIfExists: true)
-            return [sample_id, data_type, read_1, read_2]
+            return [sample_id, data_type, library, read_1, read_2]
         }
         // add lane information if multiple entries per sample_id
         .groupTuple(by: 0)
-        .flatMap { sample_id, data_type, reads_1, reads_2 ->
+        .flatMap { sample_id, data_type, library, reads_1, reads_2 ->
             if (data_type.size() == 1) {
                 // Single lane: return one tuple with 'single_lane' as lane identifier
-                return [[sample_id, 'single_lane', data_type[0], reads_1[0], reads_2[0]]]
+                return [[sample_id, 'single_lane', data_type[0], library[0], reads_1[0], reads_2[0]]]
             } else {
                 // Multiple lanes: return list of tuples with lane numbers
                 return (0..<data_type.size()).collect { idx ->
-                    [sample_id, "${idx + 1}", data_type[idx], reads_1[idx], reads_2[idx]]
+                    [sample_id, "${idx + 1}", data_type[idx], library[idx], reads_1[idx], reads_2[idx]]
                 }
             }
         }
@@ -371,10 +376,11 @@ workflow {
     // Input channel from metadata file
     ch_input = parse_input(params.input)
         .branch {
-            sample_id, lane, data_type, r1, r2 ->
+            sample_id, lane, data_type, library, r1, r2 ->
             modern: data_type == '1'
             historical: data_type == '2'
         }
+        
 
     // Reference genome
     ch_reference = channel.fromPath(params.reference, checkIfExists: true)
@@ -384,19 +390,17 @@ workflow {
     // ═══════════════════════════════════════════════════════════════════════════════
 
     // FastQC on raw (untrimmed) reads
-    ch_raw_reads_for_qc = ch_input.modern.map { sample_id, lane, _datatype, r1, r2 ->
-            [sample_id, lane, [r1, r2], 'raw_reads']
+    ch_raw_reads_for_qc = ch_input.modern.map { sample_id, lane, _datatype, library, r1, r2 ->
+            [sample_id, lane, library, [r1, r2], 'raw_reads']
         }
         // push historical reads through the same fastqc process
-        .mix(ch_input.historical.map { sample_id, lane, _datatype, r1, r2 ->
-            [sample_id, lane, [r1, r2], 'raw_reads']
+        .mix(ch_input.historical.map { sample_id, lane, _datatype, library, r1, r2 ->
+            [sample_id, lane, library, [r1, r2], 'raw_reads']
         })
-        
-
     fastqc_rawreads(ch_raw_reads_for_qc)
     // Collect all FastQC outputs and run MultiQC
     ch_multiqc_input = fastqc_rawreads.out.zip
-        .map { _sample_id, zips -> zips }
+        .map { _sample_id, _lane, _library, zips -> zips }
         .collect()
         .map { zips -> tuple(zips, 'raw_reads') }
 
@@ -412,26 +416,86 @@ workflow {
     // Trim historical reads with AdapterRemoval (handles ancient DNA damage removal)
     adapterremoval(ch_input.historical)
 
+    // now concatenate runs from the same library, prior to deduplication
+    concat_pairs_in = fastp.out.reads
+        .groupTuple(by: [0,3])
+        .map {
+            sample_id, _lanes, datatypes, library, reads1, reads2 ->
+            tuple(sample_id, library, datatypes[0], reads1, reads2)
+        }
+        // make sure that reads1 and reads2 are sorted in the same order
+        .map { sample_id, library, datatype, reads1, reads2 ->
+            def zipped = [reads1, reads2].transpose()
+                .sort { a, b -> a[0].name <=> b[0].name }
+            def (reads1_sorted, reads2_sorted) = zipped.transpose()
+            tuple(sample_id, library, datatype, reads1_sorted, reads2_sorted)
+        }
+        .mix (adapterremoval.out.trimmed_pairs
+        .groupTuple(by: [0,3])
+        .map {
+            sample_id, _lanes, datatypes, library, reads1, reads2 ->
+            tuple(sample_id, library, datatypes[0], reads1, reads2)
+        }
+        .map { sample_id, library, datatype, reads1, reads2 ->
+            // sort reads in the same order as fastp output to ensure correct pairing during concatenation
+            def zipped = [reads1, reads2].transpose()
+                .sort { a, b -> a[0].name <=> b[0].name }
+            def (reads1_sorted, reads2_sorted) = zipped.transpose()
+            tuple(sample_id, library, datatype, reads1_sorted, reads2_sorted)
+         }
+        )
+        // branch based on number of read pairs per library
+        .branch { sample_id, library, datatype, reads1, reads2 ->
+            single_lib: reads1.size() == 1
+            multi_lib: reads1.size() > 1
+        }
+
+    concat_pairs = concat_reads(concat_pairs_in.multi_lib)
+    
+    // and then concatenate merged reads from adapterremoval
+    concat_merged_in = adapterremoval.out.trimmed_collapsed
+        .groupTuple(by: [0,3])
+        .map {
+            sample_id, _lanes, datatypes, library, collapsed ->
+            tuple(sample_id, library, datatypes[0], collapsed)
+        }
+        // sort collapsed reads to ensure consistent order for concatenation
+        .map { sample_id, library, datatype, collapsed ->
+            def sorted_collapsed = collapsed.sort { a, b -> a.name <=> b.name }
+            tuple(sample_id, library, datatype, sorted_collapsed)
+        }
+        .branch { sample_id, library, datatype, collapsed ->
+            single_lib: collapsed.size() == 1
+            multi_lib: collapsed.size() > 1
+        }
+    concat_merged = concat_collapsed(concat_merged_in.multi_lib)
+
+    // combine with samples that didn't need concatenation
+    dedup_pairs_in = concat_pairs.reads_concat
+        .mix(concat_pairs_in.single_lib)
+    dedup_merged_in = concat_merged.collapsed_concat
+        .mix(concat_merged_in.single_lib)
+
+    // and push the concatenated libraries through clumpify
+    clean_paired = clumpify_paired(dedup_pairs_in)
+        
+    clean_merged = clumpify_single(dedup_merged_in)
+
     // ═══════════════════════════════════════════════════════════════════════════════
     //                  3. PREPROCESSING QC: CLEAN READS
     // ═══════════════════════════════════════════════════════════════════════════════
 
     // FastQC on trimmed reads
-    fastqc_cleanreads(
-        fastp.out.reads
-            .map { sample_id, lane, _datatype, r1, r2 ->
-                [sample_id, lane, [r1, r2], 'clean_reads']
-            }
-        .mix(
-            adapterremoval.out.trimmed_reads
-                .map { sample_id, lane, r1, r2, collapsed, singletons ->
-                    [sample_id, lane, [r1, r2, collapsed, singletons], 'clean_reads']
-                }
-            )
+    
+    fastqc_cleanreads(clean_merged
+        .map { sample_id, library, _datatype, collapsed -> tuple(sample_id, '1', library, [collapsed], 'clean')}
+        .mix(clean_paired
+        .map { sample_id, library, _datatype, reads1, reads2 -> tuple(sample_id, '1', library, [reads1, reads2], 'clean')}
         )
+    )
 
     multiqc_cleanreads(fastqc_cleanreads.out.zip
-        .map { _sample_id, zips -> zips }
+        .map { _sample_id, _lane, _library, zips -> zips }
         .collect()
         .map { zips -> tuple(zips, 'clean_reads') }
         )
@@ -446,8 +510,6 @@ workflow {
     reference_fasta = faidx_and_chunks_ch.reference_fasta.first()
     reference_fai = faidx_and_chunks_ch.reference_fai.first()
     reference_gzi = faidx_and_chunks_ch.reference_gzi.first()
-   
-    println "Scaffold list provided by user: ${params.scaffold_list ?: 'None'}"
     
     // if user provides a list of scaffolds upon which to call variants, fetch this
     if (params.scaffold_list) {
@@ -470,10 +532,6 @@ workflow {
             .collect()
     }
 
-    // now generate reference intervals - these will be used for parallelization in the variant calling 
-    // and filtering step, so not used in the mapping/preprocessing
-    reference_intervals = dochunks(reference_fai, params.chunk_size, scaffolds_ch)
-
     // define a list of autosomes and potentially xz/yw chromosomes if given
     scaffolds = scaffolds_ch
             .flatten()
@@ -483,26 +541,9 @@ workflow {
                 non_sex_limited: [params.x_scaffolds, params.z_scaffolds].flatten().contains(scaffold)
             }
 
-
-    // ═══════════════════════════════════════════════════════════════════════════════
-    //                    5. MAPPING: MODERN SAMPLES
-    // ═══════════════════════════════════════════════════════════════════════════════
-
-    // Map trimmed modern reads to reference
-    mapping_ch = fastp.out.reads
-        .map { sample_id, lane, _datatype, r1, r2 -> tuple(sample_id, lane, r1, r2) }
-        .combine(bwa_index_ch.reference)
-    // Choose mapping approach based on user parameter
-    if (params.mapper == 'bwa_mem') {
-        rawbam_ch = bwa_mem(mapping_ch)
-    }
-    else {
-        error "Unsupported mapper specified: ${params.mapper}. Currently only 'bwa_mem' is supported."
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════════
-    //                    6. MAPPING: HISTORICAL SAMPLES
-    // ═══════════════════════════════════════════════════════════════════════════════
+    // now generate reference intervals - these will be used for parallelization in the variant calling 
+    // and filtering step, so not used in the mapping/preprocessing
+    reference_intervals = dochunks(samtools_index.out.reference_fai, params.chunk_size, scaffolds_ch.flatten())
 
     // Handle genomic intervals for variant calling
     refintervals_ch = reference_intervals
@@ -514,122 +555,103 @@ workflow {
             intervals.withIndex().collect { interval, idx -> tuple(idx + 1, interval) }
         }
 
+    // ═══════════════════════════════════════════════════════════════════════════════
+    //                    5. MAPPING: MODERN SAMPLES
+    // ═══════════════════════════════════════════════════════════════════════════════
+
+    // Map trimmed modern reads to reference
+    modern_pairs_to_map = clean_paired
+        .filter { _sample_id, _library, datatype, _reads1, _reads2 -> datatype == '1' }
+        .combine(bwa_index_ch.reference)
+    // Choose mapping approach based on user parameter
+    if (params.mapper == 'bwa_mem') {
+        rawbam_ch = bwa_mem(modern_pairs_to_map)
+    }
+    else {
+        error "Unsupported mapper specified: ${params.mapper}. Currently only 'bwa_mem' is supported."
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════════
+    //                    6. MAPPING: HISTORICAL SAMPLES
+    // ═══════════════════════════════════════════════════════════════════════════════
+
+
     // Map paired-end reads from historical samples (optional)
     if (params.map_historical_pairs) {
-        map_historical_pairs_ch = adapterremoval.out.trimmed_reads
-            .map { sample_id, lane, r1, r2, _collapsed, _singletons -> tuple(sample_id, lane, r1, r2) }
+        historical_pairs_to_map = clean_paired
+            .filter { _sample_id, _library, datatype, _reads1, _reads2 -> datatype == '2' }
             .combine(bwa_index_ch.reference)
-        historical_pairbams_ch = map_historical(map_historical_pairs_ch )
+        historical_pairbams_ch = map_historical(historical_pairs_to_map)
     }
     else {
         // Create an empty channel if paired mapping is disabled
         historical_pairbams_ch = channel.empty()
     }
     
-    map_historical_collapsed_ch = adapterremoval.out.trimmed_reads
-        .map { sample_id, lane, _r1, _r2, collapsed, _singletons -> tuple(sample_id, lane, collapsed) }
+    historical_merged_to_map = clean_merged
+        .filter { _sample_id, _library, datatype, _collapsed -> datatype == '2' }
         .combine(bwa_index_ch.reference)
 
-    historical_collapsed_bams_ch = map_merged(map_historical_collapsed_ch)
+    historical_bams_ch = map_merged(historical_merged_to_map)
 
-    // map_historical_singletions_ch = adapterremoval.out.trimmed_reads
-    //     .map { sample_id, lane, _r1, _r2, _collapsed, singletons -> tuple(sample_id, lane, singletons) }
-    //     .combine(bwa_index_ch.reference)
+    // if mapping historical paired end reads, merge within each library
+    if (params.map_historical_pairs) {
+        merge_historical = historical_pairbams_ch
+            .mix(historical_bams_ch)
+            .groupTuple(by: [0,1,2])
+            .map { sample_id, library, datatype, bam_paths, _bam_indices ->
+                return tuple(sample_id, library, datatype, bam_paths)
+            }
+        historical_bams_merged_ch = merge_historical_bams(merge_historical)
+        historical_bams_ch = historical_bams_merged_ch
+    }
+
     
-    // // historical_singleton_bams_ch = map_singletons(map_historical_singletions_ch)
-
-    // collect historical bamfiles and merge
-    historical_pairbams_ch
-        .mix(historical_collapsed_bams_ch)
-        // .mix(historical_singleton_bams_ch)
-        .groupTuple(by: [0,1])
-        .map { sample_id, lane, bam_paths, _bam_indices ->
-            return tuple(sample_id, lane, bam_paths)
-        }
-        .set {historical_bam_ch}
-
-    historical_bams_merged_ch = merge_historical_bams(historical_bam_ch)
 
     // ═══════════════════════════════════════════════════════════════════════════════
-    //            7. BAM POST-PROCESSING: MERGING & DEDUPLICATION
+    //            7. BAM POST-PROCESSING: MERGING
     // ═══════════════════════════════════════════════════════════════════════════════
 
-    // Merge BAMs from samples split across multiple sequencing lanes
+    // Select the correct historical bam channel
+    //all_historical_bams = params.map_historical_pairs ? //historical_bams_merged_ch : historical_bams_ch
 
-    // clean up bamchannel a bit and combine with historical bam channel
-    datatypes_ch = ch_input.modern
-        .mix(ch_input.historical)
-        .map { sample_id, _lane, data_type, _r1, _r2 -> return tuple(sample_id, data_type) }
-        .groupTuple(by: [0,1])
-
-    rawbam_ch
-        .mix(historical_bams_merged_ch
-          .groupTuple(by: [0])
-        )
-        .groupTuple(by: [0])
-        .map { sample_id, _lanes, bam_paths, _bam_indices ->
-            return tuple(sample_id, bam_paths.flatten())
+    // Mix all per-library bams [sample_id, library, datatype, bam, bai],
+    // group by sample, merge if multiple libraries, then branch by datatype
+    per_sample_bams = rawbam_ch
+        .mix(historical_bams_ch)
+        .groupTuple(by: 0)
+        .map { sample_id, _libraries, datatypes, bam_paths, bam_indices ->
+            tuple(sample_id, datatypes[0], bam_paths.flatten(), bam_indices.flatten())
         }
-        // combine with input channel to add back the information on datatype
-        .combine(datatypes_ch, by: 0)
-        .set {rawbam_ch} 
-    
-    rawbam_ch.view()
-
-    // pull out those with multiple bams
-    rawbam_ch
-        .filter({ _sample_id, bam_paths, datatype -> bam_paths.size() > 1 })
-        .set( {bams2merge_ch} )
-    
-    // merge those bams
-    mergebams_out = samtools_merge(bams2merge_ch.map { sample_id, bam_paths, _datatype -> tuple(sample_id, bam_paths) })
-    
-    // and concatenate with those that did not need merging
-    rawbam_ch
-        .filter({ _sample_id, bam_paths, _datatype -> bam_paths.size() == 1 })
-        .map { sample_id, bam_paths, datatype ->
-            return tuple(sample_id, bam_paths[0], datatype)
+        .branch { _sample_id, _datatype, bam_paths, _bam_indices ->
+            multi: bam_paths.size() > 1
+            single: bam_paths.size() == 1
         }
-        .set( {singles_ch} )
 
-    mergebams_out
-        // add datatype back in 
-        .combine(datatypes_ch, by: 0)
-        .mix(singles_ch)
-        .set( {final_bam_ch} )
-    
-    // Mark and remove optical/PCR duplicates from BAM files
+    merged_bams = samtools_merge(per_sample_bams.multi
+        .map { sample_id, datatype, bam_paths, _bam_indices -> tuple(sample_id, datatype, bam_paths) })
 
-    // add reference path to final_bam_ch
-    final_bam_ch = final_bam_ch
-        .combine(ch_reference)
-        .map { sample_id, bam, datatype, reference ->
-            return tuple(sample_id, bam, datatype, reference)
+    all_sample_bams = merged_bams
+        .mix(per_sample_bams.single.map { sample_id, datatype, bam_paths, bam_indices ->
+            tuple(sample_id, datatype, bam_paths[0], bam_indices[0])
+        })
+        .branch { _sample_id, datatype, _bam, _bai ->
+            modern:     datatype == '1'
+            historical: datatype == '2'
         }
-    qualimap_pre_dedup(final_bam_ch.map { sample_id, bam, _datatype, reference -> tuple(sample_id, bam, reference) })
-    dedup_bam_ch = samtools_markdups(final_bam_ch.map { sample_id, bam, _datatype, reference -> tuple(sample_id, bam, reference) })
 
     // ═══════════════════════════════════════════════════════════════════════════════
     //        8. HISTORICAL DNA: DAMAGE PROFILING & RESCALING
     // ═══════════════════════════════════════════════════════════════════════════════
 
-    // add datatype back to dedupped maps
-    historical_bams = dedup_bam_ch.bam
-        .combine(datatypes_ch, by: 0)
-        .filter {
-            _sample_id, _cram, _crai, datatype -> datatype == "2"
-        }
+    rescaled_bams = damage_profiler(
+        all_sample_bams.historical.map { sample_id, _datatype, bam, bai -> tuple(sample_id, bam, bai) },
+        ch_reference
+    )
 
-    rescaled_bams = damage_profiler(historical_bams.map { sample_id, cram, crai, _datatype -> tuple(sample_id, cram, crai) }, ch_reference)
-
-    // Combine rescaled historical BAMs with deduplicated modern BAMs for unified downstream processing
-
-    dedup_bam_ch.bam
-        .combine(datatypes_ch, by: 0)
-        .filter{ _sample_id, _cram, _crai, datatype -> datatype == "1" }
-        .map { sample_id, bam, crai, _datatype -> tuple(sample_id, bam, crai) }
+    final_bam_ch = all_sample_bams.modern
+        .map { sample_id, _datatype, bam, bai -> tuple(sample_id, bam, bai) }
         .mix(rescaled_bams.rescaled_bam)
-        .set { final_bam_ch }
 
     // ═══════════════════════════════════════════════════════════════════════════════
     //              9. MAPPING QC: BAM QUALITY ASSESSMENT
@@ -749,6 +771,14 @@ workflow {
             else {
                 max_dp = (autosomal_dp * params.max_depth)
             }
+            if (min_dp < 1) {
+                log.warn "Sample ${sample_id}: dynamic min_depth evaluated to ${min_dp} (autosomal depth: ${autosomal_dp}). Setting min_depth to 1."
+                min_dp = 1
+            }
+            if (max_dp < 2) {
+                log.warn "Sample ${sample_id}: dynamic max_depth evaluated to ${max_dp} (autosomal depth: ${autosomal_dp}). Setting max_depth to 2."
+                max_dp = 2
+            }
             tuple(sample_id, min_dp, max_dp, sex_assignment)
         }
         // add the sample bedfile to this one
@@ -773,7 +803,7 @@ workflow {
         }
         else {
             pops = sample_stats
-                .map { sample_id, _autosomal_dp, _non_sex_limited_dp, _sex_limited_dp, _ratio, _sex_assignment, _ds_autosomal_dp, _ds_non_sex_limited_dp, _ds_sex_limited_dp ->
+                .map { sample_id, _autosomal_dp, _non_sex_limited_dp, _sex_limited_dp, _ratio, _sex_assignment, _ds_autosomal_dp, _ds_non_sex_limited_dp, _ds_sex_limited_dp, _ds_ratio, _ds_sex_assignment ->
                     tuple(sample_id, sample_id)
                 }
         }
@@ -1166,13 +1196,12 @@ workflow {
     // Per-sample CRAM QC and the aggregated MultiQC report
     // cramqc_reports      = cramqc_ch.qc_report
     // cram_multiqc_report = cram_multiqc.out.report
-    qualimap_pre_dedup_reports = qualimap_pre_dedup.out.qualimap_report
     qualimap_reports = qualimap.out.qualimap_report
     qualimap_downsampled_reports = params.downsample_bams ? qualimap_downsampled.out.qualimap_report : channel.empty()
 
     // Deduplicated CRAM files and duplicate-marking metrics
     raw_crams = final_bam_ch
-    cram_metrics = samtools_markdups.out.metrics
+    // cram_metrics = samtools_markdups.out.metrics
 
     // Reference genome
     reference_genome = bwa_index.out.reference
@@ -1214,9 +1243,6 @@ output {
     multiqc_cleanreads_report {
         path "00_reports/00_fastqc/01_clean_reads"
     }
-    qualimap_pre_dedup_reports {
-        path "00_reports/01_qualimap/00_qualimap_pre_markdups"
-    }
     qualimap_reports {
         path "00_reports/01_qualimap/01_qualimap_post_markdups"
     }
@@ -1234,9 +1260,9 @@ output {
         enabled params.downsample_bams
         path "02_cramfiles/downsampled"
     }
-    cram_metrics {
-        path "02_cramfiles"
-    }
+    // cram_metrics {
+    //     path "02_cramfiles"
+    // }
     // raw_vcf_stats {
     //     path "04_variant_stats"
     // }

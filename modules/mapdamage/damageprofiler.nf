@@ -15,7 +15,7 @@ process damage_profiler {
 
     script:
     def rescale_arg = params.damageprofiler_rescale ? '--rescale' : ''
-    def input_bam = bam_file.name.endsWith('.cram') ? "${sample_id}_input.bam" : bam_file.name
+    def input_bam = "${sample_id}_input.bam"
     """
     # if this is a cram file, convert to bam first
     if [[ ${bam_file} == *.cram ]]; then

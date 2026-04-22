@@ -6,10 +6,12 @@ process adapterremoval {
     //publishDir "results/adapterremoval", mode: 'copy'
 
     input:
-    tuple val(sample_id), val(lane), val(datatype), path(reads_1), path(reads_2)
+    tuple val(sample_id), val(lane), val(datatype), val(library), path(reads_1), path(reads_2)
 
     output:
-    tuple val(sample_id), val(lane), path("${sample_id}_${lane}_trimmed_R1.fastq.gz"), path("${sample_id}_${lane}_trimmed_R2.fastq.gz"), path("${sample_id}_${lane}_collapsed.fastq.gz"), path("${sample_id}_${lane}_singletons.fastq.gz"), emit: trimmed_reads
+    tuple val(sample_id), val(lane), val(datatype), val(library), path("${sample_id}_${lane}_trimmed_R1.fastq.gz"), path("${sample_id}_${lane}_trimmed_R2.fastq.gz"), emit: trimmed_pairs
+    tuple val(sample_id), val(lane), val(datatype), val(library), path("${sample_id}_${lane}_collapsed.fastq.gz"), emit: trimmed_collapsed
+    tuple val(sample_id), val(lane), val(datatype), val(library), path("${sample_id}_${lane}_singletons.fastq.gz"), emit: trimmed_singletons
 
     script:
     """
