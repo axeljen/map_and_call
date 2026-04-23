@@ -15,6 +15,7 @@ process clumpify_single {
     script:
     """
     clumpify.sh \
+        -Xmx40g \
         in=${reads} \
         out=${sample_id}_${library}.dedup.fastq.gz \
         dedupe
@@ -40,6 +41,7 @@ process clumpify_paired {
     script:
     """
     clumpify.sh \
+        -Xmx40g \
         in=${reads1} \
         in2=${reads2} \
         out=${sample_id}_${library}.dedup_R1.fastq.gz \
