@@ -33,6 +33,7 @@ include { bwa_mem_singlereads as map_singletons } from './modules/bwa/bwa_mem'
 // Mapping QC & Analysis Modules
 // ─────────────────────────────────────────────────────────────────────────────
 include { damage_profiler } from './modules/mapdamage/damageprofiler'
+include { damage_profiler_rescale } from './modules/mapdamage/damageprofiler_rescale'
 include { qualimap } from './modules/qualimap/qualimap'
 include { qualimap as qualimap_pre_dedup } from './modules/qualimap/qualimap'
 include { qualimap as qualimap_downsampled } from './modules/qualimap/qualimap'
@@ -381,7 +382,6 @@ workflow {
             historical: data_type == '2'
         }
         
-
     // Reference genome
     ch_reference = channel.fromPath(params.reference, checkIfExists: true)
 
@@ -470,27 +470,36 @@ workflow {
         }
     concat_merged = concat_collapsed(concat_merged_in.multi_lib)
 
-    // combine with samples that didn't need concatenation
-    dedup_pairs_in = concat_pairs.reads_concat
-        .mix(concat_pairs_in.single_lib)
-    dedup_merged_in = concat_merged.collapsed_concat
-        .mix(concat_merged_in.single_lib)
+    if (params.premapping_dedup) {
+        // if user wants to do pre-mapping deduplication, we can push the concatenated libraries through clumpify now
+        // combine with samples that didn't need concatenation
+        dedup_pairs_in = concat_pairs.reads_concat
+            .mix(concat_pairs_in.single_lib)
+        dedup_merged_in = concat_merged.collapsed_concat
+            .mix(concat_merged_in.single_lib)
 
-    // and push the concatenated libraries through clumpify
-    clean_paired = clumpify_paired(dedup_pairs_in)
-        
-    clean_merged = clumpify_single(dedup_merged_in)
+        // and push the concatenated libraries through clumpify
+        clean_paired = clumpify_paired(dedup_pairs_in)
+            
+        clean_merged = clumpify_single(dedup_merged_in)
+    } else {
+        // if no pre-mapping deduplication, just use the concatenated libraries as the "clean" reads for mapping
+        clean_paired = concat_pairs.reads_concat
+            .mix(concat_pairs_in.single_lib)
+        clean_merged = concat_merged.collapsed_concat
+            .mix(concat_merged_in.single_lib)
+    }
+
 
     // ═══════════════════════════════════════════════════════════════════════════════
     //                  3. PREPROCESSING QC: CLEAN READS
     // ═══════════════════════════════════════════════════════════════════════════════
 
     // FastQC on trimmed reads
-    
     fastqc_cleanreads(clean_merged
-        .map { sample_id, library, _datatype, collapsed -> tuple(sample_id, '1', library, [collapsed], 'clean')}
+        .map { sample_id, library, _datatype, collapsed -> tuple(sample_id, 'combined', library, [collapsed], 'clean')}
         .mix(clean_paired
-        .map { sample_id, library, _datatype, reads1, reads2 -> tuple(sample_id, '1', library, [reads1, reads2], 'clean')}
+        .map { sample_id, library, _datatype, reads1, reads2 -> tuple(sample_id, 'combined', library, [reads1, reads2], 'clean')}
         )
     )
 
@@ -609,7 +618,7 @@ workflow {
     
 
     // ═══════════════════════════════════════════════════════════════════════════════
-    //            7. BAM POST-PROCESSING: MERGING
+    //            7. BAM POST-PROCESSING: DEDUP (optional) and MERGING
     // ═══════════════════════════════════════════════════════════════════════════════
 
     // Select the correct historical bam channel
@@ -639,19 +648,43 @@ workflow {
             modern:     datatype == '1'
             historical: datatype == '2'
         }
+    
+    // post mapping dedup if needed
+    if (params.postmapping_dedup) {
+        dedup_bams = samtools_markdups(all_sample_bams.historical.mix(all_sample_bams.modern))
+        all_sample_bams = dedup_bams.bam.branch { _sample_id, datatype, _bam, _bai ->
+            modern:     datatype == '1'
+            historical: datatype == '2'
+        }
+    }
+        
 
     // ═══════════════════════════════════════════════════════════════════════════════
     //        8. HISTORICAL DNA: DAMAGE PROFILING & RESCALING
     // ═══════════════════════════════════════════════════════════════════════════════
 
-    rescaled_bams = damage_profiler(
-        all_sample_bams.historical.map { sample_id, _datatype, bam, bai -> tuple(sample_id, bam, bai) },
+    // run damageprofiler/damageprofiler_rescale on historical bams
+    if (params.damageprofiler_rescale) {
+        println "Running damage profiling and rescaling on historical samples..."
+        rescaled_bams = damage_profiler_rescale(
+            all_sample_bams.historical.map { sample_id, _datatype, bam, bai -> tuple(sample_id, bam, bai) },
+            ch_reference
+        )
+        final_bam_ch = all_sample_bams.modern
+            .map { sample_id, _datatype, bam, bai -> tuple(sample_id, bam, bai) }
+            .mix(rescaled_bams.rescaled_bam)
+    } else {
+        all_sample_bams.historical.view()
+        println "Damage profiling and rescaling is disabled. Skipping this step and using original BAMs for downstream analyses."
+        rescaled_bams = damage_profiler(
+            all_sample_bams.historical.map { sample_id, _datatype, bam, bai -> tuple(sample_id, bam, bai) },
         ch_reference
-    )
+        )
+        final_bam_ch = all_sample_bams.modern
+            .map { sample_id, _datatype, bam, bai -> tuple(sample_id, bam, bai) }
+            .mix(all_sample_bams.historical.map { sample_id, _datatype, bam, bai -> tuple(sample_id, bam, bai) })
+    }
 
-    final_bam_ch = all_sample_bams.modern
-        .map { sample_id, _datatype, bam, bai -> tuple(sample_id, bam, bai) }
-        .mix(rescaled_bams.rescaled_bam)
 
     // ═══════════════════════════════════════════════════════════════════════════════
     //              9. MAPPING QC: BAM QUALITY ASSESSMENT
@@ -668,6 +701,7 @@ workflow {
     dp_input_ch = final_bam_ch
         .combine(refintervals_ch)
 
+    dp_input_ch.view()
     region_depths = samtools_dp(dp_input_ch)
         .groupTuple(by: 0)
 
@@ -686,7 +720,6 @@ workflow {
             return tuple(sample, autosome_depth, non_sex_limited_depth, sex_limited_depth, ratio, sex)
         }
         }
-    
 
     // If downsample is set, estimate the fraction to downsample for each sample
     if (params.downsample_bams) {
@@ -726,7 +759,7 @@ workflow {
             .combine(downsample_fractions, by: 0)
         bams_for_calling_ch = samtools_downsample(bams_for_downsampling)
         // run qualimap on the downsampled bams too
-        qualimap_downsampled(bams_for_calling_ch)
+        qualimap_downsampled(bams_for_calling_ch.map {sample, bam, bai -> tuple(sample, null, bam, bai) })
 
         // fetch the per-base coverage also for the downsampled bams
         region_depths_downsampled = samtools_dp_downsampled(bams_for_calling_ch
@@ -786,6 +819,20 @@ workflow {
 
     mappability_mask = callable_regions(depth_cutoffs, sex_limited_contigs, non_sex_limited_contigs, reference_fai)
 
+    // Normalize sample_stats to consistent tuple size before variant calling
+    // If no downsampling was performed, add NA values for downsampling columns
+    if (!params.downsample_bams) {
+        sample_stats = sample_stats
+            .map { sample_id, autosomal_dp, non_sex_limited_dp, sex_limited_dp, ratio, sex_assignment ->
+                tuple(sample_id, autosomal_dp, non_sex_limited_dp, sex_limited_dp, ratio, sex_assignment, "NA", "NA", "NA", "NA", "NA")
+            }
+    }
+    // Remove the extra sex_assignment col from the downsampled sample stats
+    sample_stats = sample_stats
+        .map { sample_id, autosomal_dp, non_sex_limited_dp, sex_limited_dp, ratio, sex_assignment, ds_autosomal_dp, ds_non_sex_limited_dp, ds_sex_limited_dp, _ds_ratio, _ds_sex_assignment ->
+            tuple(sample_id, autosomal_dp, non_sex_limited_dp, sex_limited_dp, ratio, sex_assignment, ds_autosomal_dp, ds_non_sex_limited_dp, ds_sex_limited_dp)
+        }
+
     // ═══════════════════════════════════════════════════════════════════════════════
     //           11-12. VARIANT CALLING: SAMPLE & POPULATION SETUP & VARIANT CALLING
     // ═══════════════════════════════════════════════════════════════════════════════
@@ -803,7 +850,7 @@ workflow {
         }
         else {
             pops = sample_stats
-                .map { sample_id, _autosomal_dp, _non_sex_limited_dp, _sex_limited_dp, _ratio, _sex_assignment, _ds_autosomal_dp, _ds_non_sex_limited_dp, _ds_sex_limited_dp, _ds_ratio, _ds_sex_assignment ->
+                .map { sample_id, _autosomal_dp, _non_sex_limited_dp, _sex_limited_dp, _ratio, _sex_assignment, _ds_autosomal_dp, _ds_non_sex_limited_dp, _ds_sex_limited_dp ->
                     tuple(sample_id, sample_id)
                 }
         }
@@ -962,6 +1009,7 @@ workflow {
 
     raw_vcfs = multipop_vcf
         .mix(singlepop_vcf)
+    
     
     // extract some summary stats from raw vcf files
     raw_stats = raw_vcf_stats(raw_vcfs, 'raw_variants')
@@ -1138,19 +1186,6 @@ workflow {
     //                             Generate sample output report                \\
     // ######################################################################### \\
 
-    // If no downsampling was performed, just push NA values for these columns before sending it to the parse
-     if (!params.downsample_bams) {
-         sample_stats = sample_stats
-            .map { sample_id, autosomal_dp, non_sex_limited_dp, sex_limited_dp, ratio, sex_assignment ->
-                tuple(sample_id, autosomal_dp, non_sex_limited_dp, sex_limited_dp, ratio, sex_assignment, "NA", "NA", "NA", "NA", "NA")
-            }
-     }
-    // remove the extra sex_assignment col from the downsampeld sample stats
-    sample_stats = sample_stats
-        .map { sample_id, autosomal_dp, non_sex_limited_dp, sex_limited_dp, ratio, sex_assignment, ds_autosomal_dp, ds_non_sex_limited_dp, ds_sex_limited_dp, _ds_ratio, _ds_sex_assignment ->
-            tuple(sample_id, autosomal_dp, non_sex_limited_dp, sex_limited_dp, ratio, sex_assignment, ds_autosomal_dp, ds_non_sex_limited_dp, ds_sex_limited_dp)
-        }
-
     // run through a parser to fetch some summary statistics
     parse_summary_stats(pops
         .combine(
@@ -1193,6 +1228,9 @@ workflow {
     multiqc_rawreads_report   = multiqc_rawreads.out.report
     multiqc_cleanreads_report = multiqc_cleanreads.out.report
 
+    // clean reads
+    clean_reads = clean_merged.mix(clean_paired)
+
     // Per-sample CRAM QC and the aggregated MultiQC report
     // cramqc_reports      = cramqc_ch.qc_report
     // cram_multiqc_report = cram_multiqc.out.report
@@ -1201,7 +1239,7 @@ workflow {
 
     // Deduplicated CRAM files and duplicate-marking metrics
     raw_crams = final_bam_ch
-    // cram_metrics = samtools_markdups.out.metrics
+    cram_metrics = samtools_markdups.out.metrics
 
     // Reference genome
     reference_genome = bwa_index.out.reference
@@ -1231,8 +1269,7 @@ workflow {
 
     summary_statistics = combine_summary_tables.out.table
 
-    damage_profiles = damage_profiler.out.damage_reports
-
+    damage_profiles = rescaled_bams.damage_reports
 }
 
 output {
@@ -1256,13 +1293,18 @@ output {
     raw_crams {
         path "02_cramfiles"
     }
+    clean_reads {
+        enabled params.store_cleanreads
+        path "clean_reads"
+    }
     downsampled_cram_files {
         enabled params.downsample_bams
         path "02_cramfiles/downsampled"
     }
-    // cram_metrics {
-    //     path "02_cramfiles"
-    // }
+    cram_metrics {
+        enabled params.postmapping_dedup
+        path "02_cramfiles"
+    }
     // raw_vcf_stats {
     //     path "04_variant_stats"
     // }
@@ -1320,7 +1362,6 @@ output {
     }
     damage_profiles {
         path "00_reports/03_damage_profiles"
-        enabled !params.skip_variant_calling
     }
 }
 

@@ -7,7 +7,7 @@ process callable_regions {
 
     input: 
     tuple val(sample_id), val(min_dp), val(max_dp), val(sex_assignment), path(bedfile)
-    val sex_limitied_scaffolds
+    val sex_limited_scaffolds
     val non_sex_limited_scaffolds
     path faidx
     
@@ -15,7 +15,7 @@ process callable_regions {
     tuple val(sample_id), path("${sample_id}.callable_regions.bed"), emit: callable
 
     script:
-    def sex_limited_scaffolds_list = sex_limitied_scaffolds.join(' ')
+    def sex_limited_scaffolds_list = sex_limited_scaffolds.join(' ')
     def non_sex_limited_scaffolds_list = non_sex_limited_scaffolds.join(' ')
     // if min dp is an integer, this should be used also on sex-linked contigs, otherwise half it if the sex_assignment is hemizygous
     def min_dp_sexlinked = sex_assignment == "hemizygous" ? (min_dp instanceof Integer ? min_dp / 2 : min_dp) : min_dp

@@ -126,7 +126,6 @@ for sample in samples:
         combined_ab_dp[sample]["genotype_depth"] = sampled_dp
 
 
-print(combined_ab_dp['PD_0028_Allenopithecus_nigroviridis'].keys())
 # write combined stats to files
 with open(f"{args.output}_ab.tsv", "w") as f:
     print(f)

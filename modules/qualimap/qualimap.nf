@@ -12,6 +12,7 @@ process qualimap {
     tuple val(sample_id), path("${sample_id}_qualimap.pdf"), emit: qualimap_report
 
     script:
+    def mem = (task.memory.toMega() * 0.8) as long
     """
     bamfile=${bam_file}
     # convert from cram to bam if in cram format
@@ -19,7 +20,7 @@ process qualimap {
         samtools view -@ ${task.cpus} -b -o tmp.${sample_id}.bam ${bam_file}
         bamfile=tmp.${sample_id}.bam
     fi
-    qualimap bamqc -bam \$bamfile -outfile ${sample_id}_qualimap.pdf -outdir . -outformat PDF
+    qualimap bamqc --java-mem-size=${mem}M -bam \$bamfile -outfile ${sample_id}_qualimap.pdf -outdir . -outformat PDF
     # move the final pdf here
     pdf_file=\$(find . -name "*qualimap.pdf" | head -n 1)
     mv \$pdf_file ${sample_id}_qualimap.pdf

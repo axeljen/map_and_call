@@ -13,7 +13,7 @@
 ml nextflow
 
 # nextflow run main.nf --input testfiles/input.csv -profile dardel -resume
-nextflow run main.nf --input ../mapping_testfiles/input_2.csv -profile dardel -resume \
+nextflow run main.nf --input ../mapping_testfiles/input_2.csv -profile dardel_test -resume \
     --reference ../mapping_testfiles/reference/GCF_003339765.1_Mmul_10_4chroms.fa \
     --reads_dir ../mapping_testfiles/reads \
     --scaffold_list ../mapping_testfiles/scaffolds.txt \
