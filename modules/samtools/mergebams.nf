@@ -8,17 +8,19 @@ process samtools_merge {
     tuple val(sample_id), val(datatype), path(bam_files)
 
     output:
-    tuple val(sample_id), val(datatype), path("${sample_id}.bam"), emit: merged_bam
+    tuple val(sample_id), val(datatype), path("${sample_id}.bam"), path("${sample_id}.bam.bai"), emit: merged_bam
 
     script:
     """
     samtools merge -@ ${task.cpus} ${sample_id}.bam ${bam_files.join(' ')}
     # echo "Simulated merged BAM content for sample ${sample_id}" > ${sample_id}.bam
+    samtools index ${sample_id}.bam
     """
 
     stub:
     """
     touch ${sample_id}.bam
+    touch ${sample_id}.bam.bai
     """
 }
 
