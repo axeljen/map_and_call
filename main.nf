@@ -484,10 +484,17 @@ workflow {
         clean_merged = clumpify_single(dedup_merged_in)
     } else {
         // if no pre-mapping deduplication, just use the concatenated libraries as the "clean" reads for mapping
+        // single_lib items come from groupTuple and carry single-element lists — unwrap to plain paths
         clean_paired = concat_pairs.reads_concat
-            .mix(concat_pairs_in.single_lib)
+            .mix(concat_pairs_in.single_lib
+                .map { sample_id, library, datatype, reads1, reads2 ->
+                    tuple(sample_id, library, datatype, reads1[0], reads2[0])
+                })
         clean_merged = concat_merged.collapsed_concat
-            .mix(concat_merged_in.single_lib)
+            .mix(concat_merged_in.single_lib
+                .map { sample_id, library, datatype, collapsed ->
+                    tuple(sample_id, library, datatype, collapsed[0])
+                })
     }
 
 
@@ -514,6 +521,7 @@ workflow {
     // ═══════════════════════════════════════════════════════════════════════════════
 
     // Index reference genome and create intervals for parallel processing
+    // check if the indices needed for bwa already exist, and if not, create them. 
     bwa_index_ch = bwa_index(ch_reference)
     faidx_and_chunks_ch = samtools_index(ch_reference)
     reference_fasta = faidx_and_chunks_ch.reference_fasta.first()
@@ -648,7 +656,6 @@ workflow {
             modern:     datatype == '1'
             historical: datatype == '2'
         }
-    
     // post mapping dedup if needed
     if (params.postmapping_dedup) {
         dedup_bams = samtools_markdups(all_sample_bams.historical.mix(all_sample_bams.modern))
@@ -667,14 +674,13 @@ workflow {
     if (params.damageprofiler_rescale) {
         println "Running damage profiling and rescaling on historical samples..."
         rescaled_bams = damage_profiler_rescale(
-            all_sample_bams.historical.map { sample_id, _datatype, bam, bai -> tuple(sample_id, bam, bai) },
+            all_sample_bams.historical,
             ch_reference
         )
         final_bam_ch = all_sample_bams.modern
             .map { sample_id, _datatype, bam, bai -> tuple(sample_id, bam, bai) }
             .mix(rescaled_bams.rescaled_bam)
     } else {
-        all_sample_bams.historical.view()
         println "Damage profiling and rescaling is disabled. Skipping this step and using original BAMs for downstream analyses."
         rescaled_bams = damage_profiler(
             all_sample_bams.historical.map { sample_id, _datatype, bam, bai -> tuple(sample_id, bam, bai) },
@@ -701,7 +707,6 @@ workflow {
     dp_input_ch = final_bam_ch
         .combine(refintervals_ch)
 
-    dp_input_ch.view()
     region_depths = samtools_dp(dp_input_ch)
         .groupTuple(by: 0)
 
@@ -759,7 +764,7 @@ workflow {
             .combine(downsample_fractions, by: 0)
         bams_for_calling_ch = samtools_downsample(bams_for_downsampling)
         // run qualimap on the downsampled bams too
-        qualimap_downsampled(bams_for_calling_ch.map {sample, bam, bai -> tuple(sample, null, bam, bai) })
+        qualimap_downsampled(bams_for_calling_ch)
 
         // fetch the per-base coverage also for the downsampled bams
         region_depths_downsampled = samtools_dp_downsampled(bams_for_calling_ch
@@ -1239,7 +1244,8 @@ workflow {
 
     // Deduplicated CRAM files and duplicate-marking metrics
     raw_crams = final_bam_ch
-    cram_metrics = samtools_markdups.out.metrics
+        
+    cram_metrics = params.postmapping_dedup ? samtools_markdups.out.metrics : channel.empty()
 
     // Reference genome
     reference_genome = bwa_index.out.reference
