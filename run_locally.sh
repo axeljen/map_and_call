@@ -16,4 +16,5 @@ nextflow run main.nf --input ../testfiles/input.csv -profile standard -resume \
     --reference ../testfiles/reference/GCF_003339765.1_Mmul_10_4chroms.fa \
     --reads_dir ../testfiles/reads/supersmall \
     --scaffold_list ../testfiles/scaffolds.txt \
-    --name ../testrun_output
+    --variant_caller bcftools \
+    --outdir testout_bcftools
