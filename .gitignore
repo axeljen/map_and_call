@@ -10,3 +10,4 @@ work
 *.html
 test
 execution_trace*.txt
+output
