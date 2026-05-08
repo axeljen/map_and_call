@@ -15,9 +15,9 @@
 nextflow run main.nf --input ../testfiles/input.csv -profile standard -resume \
     --reference ../testfiles/reference/GCF_003339765.1_Mmul_10_4chroms.fa \
     --reads_dir ../testfiles/reads/supersmall \
-    --scaffold_list ../testfiles/scaffolds.txt \
-    --variant_caller bcftools \
-    --outdir test/bcftools_cache
+    --scaffold_list ../testfiles/test_4chroms.txt \
+    --variant_caller freebayes \
+    --outdir test/freebayes_new
 
 # nextflow run preprocess_reads.nf --input ../testfiles/input.csv -profile standard -resume \
 #     --reference ../testfiles/reference/GCF_003339765.1_Mmul_10_4chroms.fa \
