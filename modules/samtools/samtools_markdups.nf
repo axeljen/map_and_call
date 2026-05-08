@@ -12,10 +12,10 @@ process samtools_markdups {
 
     script:
     """
-    samtools collate -@ ${params.samtools_md_threads} -O -u ${bam} | \
-    samtools fixmate -@ ${params.samtools_md_threads} -m -u - - | \
-    samtools sort -@ ${params.samtools_md_threads} -u - | \
-    samtools markdup -@ ${params.samtools_md_threads} -r -f ${sample_id}.dedup_metrics.txt -O BAM - ${sample_id}.dedup.bam
+    samtools collate -@ ${task.cpus} -O -u ${bam} | \
+    samtools fixmate -@ ${task.cpus} -m -u - - | \
+    samtools sort -@ ${task.cpus} -u - | \
+    samtools markdup -@ ${task.cpus} -r -f ${sample_id}.dedup_metrics.txt -O BAM - ${sample_id}.dedup.bam
     #--use-read-groups 
     samtools index ${sample_id}.dedup.bam
 
