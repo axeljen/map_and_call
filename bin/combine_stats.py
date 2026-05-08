@@ -53,10 +53,11 @@ for file in ab_dp_files[1:]:
             values = [float(x) for x in items[2:]]
             if sample not in combined_ab_dp:
                 raise ValueError(f"Sample {sample} found in file {file} not found in the first ab-dp file.")
-            combined_ab_dp[sample][stat] = values
+            combined_ab_dp[sample][stat] = combined_ab_dp[sample][stat] + values
             _samples.append(sample)
     if not set(_samples) == set(samples):
         raise ValueError(f"Samples in file {file} do not match samples in the first ab-dp file.")
+
 # gt stats
 for file in gt_stats_files:
     with open(file, "r") as f:
