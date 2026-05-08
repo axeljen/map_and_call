@@ -135,17 +135,19 @@ workflow INDEX_REFERENCE {
     reference_intervals = dochunks(
         samtools_index.out.reference_fai, 
         chunk_size, 
-        scaffolds_ch.flatten()
+        scaffolds_ch.flatten().toList()
     )
 
     // Format intervals into tuples with region IDs
     refintervals_ch = reference_intervals
-        .map { row -> row?.trim() }
-        .flatMap { row -> row ? row.split(/\r?\n/) as List : [] }
-        .filter { row -> row }
-        .collect()
-        .flatMap { intervals ->
-            intervals.withIndex().collect { interval, idx -> tuple(idx + 1, interval) }
+        .flatMap { text -> text
+                .trim()
+                .split('\n')
+                .toList()
+                .withIndex()
+                .collect { interval, i ->
+                    tuple(i + 1, interval.split(',').toList())
+                }
         }
 
     emit:

@@ -78,14 +78,24 @@ workflow VARIANT_CALLING {
         }
 
     varcall_ch = bams_for_calling
-        .map { _sample_id, cram, crai -> tuple(cram, crai) }
+        // sort by sample_id to ensure consistent ordering
+        .toSortedList { a, b -> a[0] <=> b[0] }
+        .map { sorted_list -> 
+            // Extract CRAMs and CRAIs in sorted order
+            def crams = sorted_list.collect { item -> item[1] }.flatten()
+            def crais = sorted_list.collect { item -> item[2] }.flatten()
+            tuple(crams, crais)
+        }
         .combine(refintervals_ch)
-        .groupTuple(by: [2,3])
+       //.groupTuple(by: [2,3])
          // Broadcast reference bundle to all variant calling tasks
         .combine(ref_bundle_ch)
         .map { bams, bais, region_id, regions, ref_genome, ref_indices ->
             tuple(bams, bais, ref_genome, ref_indices, region_id, regions)
         }
+        // .view { bams, bais, ref_genome, ref_indices, region_id, regions ->
+        //     println "Prepared variant calling input for region ${region_id} with reference ${ref_genome} and BAMs: ${bams.join(', ')}"
+        // }
 
 
     // ─────────────────────────────────────────────────────────────────────────────

@@ -5,7 +5,7 @@ process finalize_masks {
 
 
     input: 
-    tuple val(sample_id), val(region_id), val(region), path(callable_bed), path(filtered_snps), path(filtered_indels)
+    tuple val(sample_id), val(region_id), val(regions), path(callable_bed), path(filtered_snps), path(filtered_indels)
     
     output:
     tuple val(sample_id), path("${sample_id}_${region_id}.homref_invariants.bed.gz"), emit: homref_invariants
@@ -13,12 +13,16 @@ process finalize_masks {
     tuple val(sample_id), path("${sample_id}_${region_id}.mappability_mask_snps.bed.gz"), emit: mappability_mask_snps
 
     script:
-    def chrom = region.split(':')[0]
-    def start = region.split(':')[1].split('-')[0].toInteger() - 1 // convert to 0-based for bedtools
-    def end = region.split(':')[1].split('-')[1]
+    def region_list = regions.join(' ')
     """
     # make dummy bedfile for filtering input bed
-    echo -e "${chrom}\t${start}\t${end}" > ${sample_id}_${region_id}_regionstring.bed
+    for region in ${region_list};
+        do
+        chrom=\$(echo \$region | cut -d: -f1)
+        start=\$((\$(echo \$region | cut -d: -f2 | cut -d- -f1) - 1))
+        end=\$(echo \$region | cut -d: -f2 | cut -d- -f2)
+        echo -e "\${chrom}\t\${start}\t\${end}" >> ${sample_id}_${region_id}_regionstring.bed
+    done
     bedtools intersect -a ${callable_bed} -b ${sample_id}_${region_id}_regionstring.bed > ${sample_id}_${region_id}_callable.bed.tmp && mv ${sample_id}_${region_id}_callable.bed.tmp ${sample_id}_${region_id}_callable.bed
 
     # now it's just a matter of subtracting some stuff from callable bed to get the different masks

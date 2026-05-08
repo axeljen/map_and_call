@@ -98,7 +98,7 @@ workflow VARIANT_FILTERS {
     ch_reference           // path: reference FASTA
     reference_fai          // path: reference .fai index
     reference_gzi          // path: reference .gzi index
-    refintervals_ch        // tuple: [region_id, interval]
+    refintervals_ch        // tuple: [region_id, [intervals]]
     callable_regions       // tuple: [sample_id, bedfile]
     depth_cutoffs          // tuple: [sample_id, min_dp, max_dp, sex_assignment, depths]
     sex_limited_contigs    // channel value: sex-limited chromosomes
@@ -154,6 +154,9 @@ workflow VARIANT_FILTERS {
     bcftools_filter_snps(select_snps.out.vcf, filter_expressions.snp_filter_expr, "snps")
     bcftools_filter_indels(select_indels.out.vcf, filter_expressions.indel_filter_expr, "indels")
 
+    refintervals_ch
+        .combine(bcftools_filter_snps.out.vcf, by: 0)
+        .combine(callable_regions)
     // run through callability filter
     callability_filter_snps(
         refintervals_ch

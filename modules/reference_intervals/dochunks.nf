@@ -10,12 +10,13 @@ process dochunks {
     input:
     path refindex
     val chunk_size
-    val scaffold_list
+    val scaffolds
 
     output:
     stdout emit: reference_intervals
 
     script:
+    def scaffold_list = scaffolds.join(' ')
     """
     # make a temporary file listing the scaffolds to be chunked
     for scaffold in ${scaffold_list};
