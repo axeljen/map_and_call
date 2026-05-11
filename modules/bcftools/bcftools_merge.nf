@@ -13,7 +13,7 @@ process bcftools_merge {
 
     script:
     """
-    bcftools merge -Ov ${vcf_files.join(' ')} |\
+    bcftools merge --force-single -Ov ${vcf_files.join(' ')} |\
         # remove any invariant sites from the merged vcf
         bcftools view -m2 -Oz -o region-${region_id}.${category}.vcf.gz -
     bcftools index region-${region_id}.${category}.vcf.gz
