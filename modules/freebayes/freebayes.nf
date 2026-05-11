@@ -29,7 +29,16 @@ process freebayes{
         echo -e "\${chrom}\t\${start}\t\${end}" >> freebayes_targets.bed
     done
 
-    freebayes -f ${reference} -t freebayes_targets.bed --populations freebayes_popfile.txt --min-mapping-quality ${params.min_mapqual} --min-base-quality ${params.min_basequal} --ploidy ${params.ploidy} ${bamlist} | bgzip - > freebayes.region-${region_id}.vcf.gz
+    # freebayes doesn't like zipped fasta files, so if it's a gzipped reference, extract and index
+    if [[ ${reference} == *.gz ]]; then
+        echo "Reference genome is gzipped, extracting..."
+        gunzip -c ${reference} > ${reference.baseName}
+        reference=${reference.baseName}
+        samtools faidx ${reference}; else 
+        reference=${reference}
+    fi
+
+    freebayes -f \${reference} -t freebayes_targets.bed --populations freebayes_popfile.txt --min-mapping-quality ${params.min_mapqual} --min-base-quality ${params.min_basequal} --ploidy ${params.ploidy} ${bamlist} | bgzip - > freebayes.region-${region_id}.vcf.gz
     bcftools index freebayes.region-${region_id}.vcf.gz
     """
 
