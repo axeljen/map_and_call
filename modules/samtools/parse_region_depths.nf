@@ -11,16 +11,16 @@ process parse_region_depths {
     tuple val(sample_id), path("${sample_id}.depths.bed"), emit: sample_depth_beds
     tuple val(sample_id), path("${sample_id}.depths.avg.txt"), emit: sample_depth_avg
     script:
+    // Sort by numeric prefix before first underscore
+    def sortedBeds = bedfiles.sort { a, b ->
+        a.name.tokenize('_')[0].toInteger() <=> b.name.tokenize('_')[0].toInteger()
+    }
     
-    """
-    # Extract chromosome order from faidx and create a sort key file
-    awk '{print \$1}' ${faidx} | awk '{print \$1, NR}' > chrom_order.txt
-    
+    """    
     # Cat all bed files together, add sort key, sort, then remove key
-    cat ${bedfiles} | \
-        awk 'NR==FNR {order[\$1]=\$2; next} {print order[\$1], \$0}' chrom_order.txt - | \
-        sort -k1,1n -k3,3n | \
-        cut -d' ' -f2- > ${sample_id}.depths.bed
+    for bed in ${sortedBeds}; do
+        cat \$bed >> ${sample_id}.depths.bed
+    done
 
    # then do the average depths per scaffold
     cat ${sample_id}.depths.bed | \

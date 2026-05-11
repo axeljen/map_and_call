@@ -66,7 +66,8 @@ process callable_regions {
     # Sort and merge overlapping/adjacent regions
     # First merge per-scaffold using GNU sort (disk-based) to avoid OOM with large files,
     # then re-sort by faidx scaffold order on the much smaller merged output
-    sort -k1,1 -k2,2n tmp.${sample_id}.callable_regions.bed | bedtools merge -i - > tmp.${sample_id}.merged.bed
+    bedtools merge -i tmp.${sample_id}.callable_regions.bed > tmp.${sample_id}.merged.bed
+    # and sort the final output so that the sex-limited scaffolds show up where they should
     bedtools sort -faidx ${faidx} -i tmp.${sample_id}.merged.bed > ${sample_id}.callable_regions.bed
 
     """

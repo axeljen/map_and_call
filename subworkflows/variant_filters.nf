@@ -124,7 +124,7 @@ workflow VARIANT_FILTERS {
             tuple(region_id, vcf, idx, reference, ref_fai, ref_gzi)
         }
         .set { bcftools_norm_in_ch }
-    
+
     bcftools_norm(bcftools_norm_in_ch)
 
     // ─────────────────────────────────────────────────────────────────────────────
@@ -184,7 +184,6 @@ workflow VARIANT_FILTERS {
     // // ─────────────────────────────────────────────────────────────────────────────
 
     
-
     bcftools_merge_snps(ab_filter_snps.out.vcf
         .groupTuple(by: 0)
         .map {region_id, sample_ids, sample_vcfs, idxs -> tuple(region_id, sample_ids, sample_vcfs, idxs, 'snps_abfiltered')}
