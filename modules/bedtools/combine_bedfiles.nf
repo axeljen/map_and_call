@@ -18,7 +18,7 @@ process combine_bedfiles {
     for bedfile in ${bedfiles}; do
         cat \${bedfile} >> tmp.${sample_id}.bed
     done
-    bedtools sort -g ${reference_fai} -i tmp.${sample_id}.bed > ${sample_id}_${name}.bed
+    bedtools sort -faidx ${reference_fai} -i tmp.${sample_id}.bed > ${sample_id}_${name}.bed
     # print the sum of all regions to stdout
     awk '{sum += \$3 - \$2} END {print sum}' ${sample_id}_${name}.bed > total_sites.txt
     rm tmp.${sample_id}.bed
