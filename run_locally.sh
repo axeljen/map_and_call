@@ -14,6 +14,7 @@
 
 # only used for testing!
 
+
 nextflow run main.nf --input ../testfiles/input.csv -profile standard -resume \
     --reference ../testfiles/reference/GCF_003339765.1_Mmul_10_4chroms.fa \
     --reads_dir ../testfiles/reads/supersmall \
