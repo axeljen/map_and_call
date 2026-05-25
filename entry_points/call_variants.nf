@@ -10,25 +10,25 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Subworkflow imports
 // ─────────────────────────────────────────────────────────────────────────────
-include { INDEX_REFERENCE } from './subworkflows/index_reference'
-include { VARIANT_CALLING } from './subworkflows/variant_calling'
-include { VARIANT_FILTERS } from './subworkflows/variant_filters'
+include { INDEX_REFERENCE } from '../subworkflows/index_reference'
+include { VARIANT_CALLING } from '../subworkflows/variant_calling'
+include { VARIANT_FILTERS } from '../subworkflows/variant_filters'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Module imports
 // ─────────────────────────────────────────────────────────────────────────────
-include { extract_sample_from_bam } from './modules/samtools/extract_sample_from_bam'
-include { samtools_dp } from './modules/samtools/samtools_dp_process'
-include { parse_region_depths } from './modules/samtools/parse_region_depths'
-include { samtools_downsample } from './modules/samtools/samtools_downsample'
-include { callable_regions } from './modules/bedtools/callable_regions'
-include { parse_summary_stats } from './modules/summary_stats/parse_summary_stats'
-include { combine_summary_tables } from './modules/summary_stats/combine_summary_files'
+include { extract_sample_from_bam } from '../modules/samtools/extract_sample_from_bam'
+include { samtools_dp } from '../modules/samtools/samtools_dp_process'
+include { parse_region_depths } from '../modules/samtools/parse_region_depths'
+include { samtools_downsample } from '../modules/samtools/samtools_downsample'
+include { callable_regions } from '../modules/bedtools/callable_regions'
+include { parse_summary_stats } from '../modules/summary_stats/parse_summary_stats'
+include { combine_summary_tables } from '../modules/summary_stats/combine_summary_files'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Utility imports
 // ─────────────────────────────────────────────────────────────────────────────
-import WorkflowUtils
+// import WorkflowUtils
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Utility functions
@@ -60,6 +60,106 @@ def parse_bamfile_list(bamfile_list) {
         }
 }
 
+/*
+ * Setup sex chromosome system and identify sex-linked contigs
+ * Returns map with: sex_chrom_system, sex_linked_list, sex_limited_list, non_sex_limited_list
+ */
+def setup_sex_chromosome_system() {
+    def result = [
+        sex_chrom_system: 'unknown',
+        sex_linked_list: [],
+        sex_limited_list: [],
+        non_sex_limited_list: []
+    ]
+    
+    if (params.x_scaffolds || params.y_scaffolds) {
+        if (params.z_scaffolds || params.w_scaffolds) {
+            error "Please only specify either X and/or Y, OR Z and/or W scaffolds, not both."
+        }
+        result.sex_chrom_system = 'XY'
+        result.sex_linked_list = [params.x_scaffolds, params.y_scaffolds].flatten()
+        result.sex_limited_list = [params.y_scaffolds].flatten()
+        result.non_sex_limited_list = [params.x_scaffolds].flatten()
+    }
+    else if (params.z_scaffolds || params.w_scaffolds) {
+        result.sex_chrom_system = 'ZW'
+        result.sex_linked_list = [params.z_scaffolds, params.w_scaffolds].flatten()
+        result.sex_limited_list = [params.w_scaffolds].flatten()
+        result.non_sex_limited_list = [params.z_scaffolds].flatten()
+    }
+    
+    return result
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Helper function: Calculate sample depth statistics and sex assignments
+// ─────────────────────────────────────────────────────────────────────────────
+def calculate_depth_and_sex(depth_avg_ch, sex_limited_list, non_sex_limited_list, 
+                            sex_assignment_lower_threshold, sex_assignment_upper_threshold) {
+    return depth_avg_ch
+        .flatMap {
+            sample, file ->
+                file.splitCsv(header: false, sep: '\t').collect { row ->
+                    def chrom = row[0]
+                    def avg_depth = row[2].toDouble()
+                    return tuple(sample, chrom, avg_depth)
+                }
+        }
+        // Categorize chromosomes
+        .map {
+            sample, chrom, avg_depth ->
+                def category = 'autosomes'
+                if (sex_limited_list && sex_limited_list.contains(chrom)) {
+                    category = 'sex_limited'
+                }
+                if (non_sex_limited_list && non_sex_limited_list.contains(chrom)) {
+                    category = 'non_sex_limited'
+                }
+                return tuple(sample, chrom, avg_depth, category)
+        }
+        // Group by sample and category, calculate average depth per category
+        .groupTuple(by: [0, 3])
+        .map { sample, chroms, values, category ->
+            def avg_depth = values.sum() / values.size()
+            return tuple(sample, [(category): avg_depth])
+        }
+        .groupTuple(by: 0)
+        .map { sample, category_maps ->
+            // Merge all category maps into a single map per sample
+            def depth_map = [:]
+            category_maps.each { map ->
+                depth_map.putAll(map)
+            }
+            tuple(sample, depth_map)
+        }
+        // Calculate ratio and assign sex
+        .map { sample, depth_map ->
+            def autosome_depth = depth_map.get('autosomes', 0.0)
+            def non_sex_limited_depth = depth_map.get('non_sex_limited', 0.0)
+            def sex_limited_depth = depth_map.get('sex_limited', 0.0)
+            
+            def ratio = (autosome_depth > 0 && non_sex_limited_depth > 0) ? 
+                        non_sex_limited_depth / autosome_depth : 0.0
+            
+            def sex = 'unknown'
+            if (ratio > 0) {
+                if (ratio < sex_assignment_lower_threshold) {
+                    sex = 'unknown'
+                } else if (ratio >= 1.5) {
+                    sex = 'unknown'
+                } else if (sex_assignment_lower_threshold <= ratio && ratio <= sex_assignment_upper_threshold) {
+                    sex = 'hemizygous'
+                } else {
+                    sex = 'homozygous'
+                }
+            }
+            
+            tuple(sample, autosome_depth, non_sex_limited_depth, sex_limited_depth, ratio, sex)
+        }
+}
+
+
 // ═══════════════════════════════════════════════════════════════════════════════
 //                           MAIN WORKFLOW
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -80,7 +180,7 @@ workflow {
     }
     
     // Setup sex chromosome system
-    sex_config = WorkflowUtils.setupSexChromosomeSystem(params)
+    sex_config = setup_sex_chromosome_system()
     def sex_chrom_system = sex_config.sex_chrom_system
     def sex_linked_list = sex_config.sex_linked_list
     def sex_limited_list = sex_config.sex_limited_list
@@ -118,15 +218,14 @@ workflow {
     
     // Parse BAM file list
     bam_input_ch = parse_bamfile_list(params.bamfiles)
-    
+
     // Extract sample IDs from BAM read groups
-    extract_sample_from_bam(bam_input_ch.map { bam, _bai -> bam })
+    extract_sample_from_bam(bam_input_ch)
     
     // Combine extracted sample IDs with BAM/BAI files
-    bams_with_samples = extract_sample_from_bam.out.sample_id
-        .map { it.trim() }
-        .combine(bam_input_ch)
-        .map { sample_id, bam, bai ->
+    bams_with_samples = extract_sample_from_bam.out.sample_bams
+        .map {bam, bai, sample_id_file -> 
+            def sample_id = sample_id_file.text.trim()
             tuple(sample_id, bam, bai)
         }
     
@@ -140,7 +239,7 @@ workflow {
         .groupTuple(by: 0)
     
     // Parse region depths and calculate sample depths
-    sample_depths = WorkflowUtils.calculateDepthAndSex(
+    sample_depths = calculate_depth_and_sex(
         parse_region_depths(region_depths, INDEX_REFERENCE.out.reference_fai).sample_depth_avg,
         sex_limited_list,
         non_sex_limited_list,
@@ -196,7 +295,7 @@ workflow {
     
     // Calculate depth cutoffs for callable regions
     depth_cutoffs = sample_depths
-        .map { sample_id, autosomal_dp, _non_sex_limited_dp, _sex_limited_dp, _ratio, _sex_assignment ->
+        .map { sample_id, autosomal_dp, _non_sex_limited_dp, _sex_limited_dp, _ratio, sex_assignment ->
             def min_dp
             def max_dp
             
@@ -211,14 +310,18 @@ workflow {
                 max_dp = (autosomal_dp * params.max_depth)
             }
             
-            tuple(sample_id, min_dp, max_dp)
+            tuple(sample_id, min_dp, max_dp, sex_assignment)
         }
+            // Add the sample bedfile to this
+        .combine(parse_region_depths.out.sample_depth_beds, by: 0)
     
     // Calculate callable regions
-    callable_regions_out = callable_regions(bams_for_calling
-        .combine(ch_reference)
+    callable_regions_input = depth_cutoffs
+        .combine(sex_limited_contigs.toList())
+        .combine(non_sex_limited_contigs.toList())
         .combine(INDEX_REFERENCE.out.reference_fai)
-        .combine(depth_cutoffs, by: 0))
+
+    callable_regions_out = callable_regions(callable_regions_input)
     
     // ═══════════════════════════════════════════════════════════════════════════════
     //                     VARIANT CALLING

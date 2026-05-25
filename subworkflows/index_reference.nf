@@ -90,6 +90,7 @@ workflow INDEX_REFERENCE {
     
     // Index with samtools
     faidx_and_chunks_ch = samtools_index(ch_ref_split.for_samtools)
+    //faidx_and_chunks_ch.reference_intervals.view()
     
     reference_fasta = faidx_and_chunks_ch.reference_fasta.first()
     reference_fai = faidx_and_chunks_ch.reference_fai.first()

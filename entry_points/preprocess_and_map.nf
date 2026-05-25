@@ -10,17 +10,17 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Subworkflow imports
 // ─────────────────────────────────────────────────────────────────────────────
-include { INDEX_REFERENCE } from './subworkflows/index_reference'
-include { PREPROCESS_MODERN } from './subworkflows/preprocess_modern'
-include { PREPROCESS_HISTORICAL } from './subworkflows/preprocess_historical'
-include { MAP_MODERN } from './subworkflows/map_modern'
-include { MAP_HISTORICAL } from './subworkflows/map_historical'
-include { PROCESS_BAMS } from './subworkflows/process_bams'
+include { INDEX_REFERENCE } from '../subworkflows/index_reference'
+include { PREPROCESS_MODERN } from '../subworkflows/preprocess_modern'
+include { PREPROCESS_HISTORICAL } from '../subworkflows/preprocess_historical'
+include { MAP_MODERN } from '../subworkflows/map_modern'
+include { MAP_HISTORICAL } from '../subworkflows/map_historical'
+include { PROCESS_BAMS } from '../subworkflows/process_bams'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Utility imports
 // ─────────────────────────────────────────────────────────────────────────────
-import WorkflowUtils
+// import WorkflowUtils
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Utility functions
@@ -58,6 +58,37 @@ def parse_input(metadata_file) {
         }
 }
 
+/*
+ * Setup sex chromosome system and identify sex-linked contigs
+ * Returns map with: sex_chrom_system, sex_linked_list, sex_limited_list, non_sex_limited_list
+ */
+def setup_sex_chromosome_system() {
+    def result = [
+        sex_chrom_system: 'unknown',
+        sex_linked_list: [],
+        sex_limited_list: [],
+        non_sex_limited_list: []
+    ]
+    
+    if (params.x_scaffolds || params.y_scaffolds) {
+        if (params.z_scaffolds || params.w_scaffolds) {
+            error "Please only specify either X and/or Y, OR Z and/or W scaffolds, not both."
+        }
+        result.sex_chrom_system = 'XY'
+        result.sex_linked_list = [params.x_scaffolds, params.y_scaffolds].flatten()
+        result.sex_limited_list = [params.y_scaffolds].flatten()
+        result.non_sex_limited_list = [params.x_scaffolds].flatten()
+    }
+    else if (params.z_scaffolds || params.w_scaffolds) {
+        result.sex_chrom_system = 'ZW'
+        result.sex_linked_list = [params.z_scaffolds, params.w_scaffolds].flatten()
+        result.sex_limited_list = [params.w_scaffolds].flatten()
+        result.non_sex_limited_list = [params.z_scaffolds].flatten()
+    }
+    
+    return result
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 //                           MAIN WORKFLOW
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -68,7 +99,7 @@ workflow {
     println "Running PREPROCESS_AND_MAP workflow: preprocessing, mapping, and BAM processing (no variant calling)"
     
     // Setup sex chromosome system
-    sex_config = WorkflowUtils.setupSexChromosomeSystem(params)
+    sex_config = setup_sex_chromosome_system()
     def sex_chrom_system = sex_config.sex_chrom_system
     def sex_linked_list = sex_config.sex_linked_list
     def sex_limited_list = sex_config.sex_limited_list
