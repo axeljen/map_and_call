@@ -13,8 +13,6 @@ process samtools_index {
     path "${reference}", emit: reference_fasta
     path "${reference}.fai", emit: reference_fai
     path "${reference}.gzi", emit: reference_gzi
-    stdout emit: reference_intervals
-
 
     script:
     """
@@ -23,8 +21,7 @@ process samtools_index {
     if [ ! -f ${reference}.gzi ]; then
         touch ${reference}.gzi
     fi
-    # do the chunking too
-    dochunks.py ${reference}.fai ${params.chunk_size}
+    
     """
 
     stub:
