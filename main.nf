@@ -285,12 +285,10 @@ workflow {
     multiqc_rawreads_report = PREPROCESS_MODERN.out.multiqc_raw_report
         .mix(PREPROCESS_HISTORICAL.out.multiqc_raw_report)
         .collect()
-        .first()
     
     multiqc_cleanreads_report = PREPROCESS_MODERN.out.multiqc_clean_report
         .mix(PREPROCESS_HISTORICAL.out.multiqc_clean_report)
         .collect()
-        .first()
 
     clean_reads = PREPROCESS_MODERN.out.clean_reads
         .mix(PREPROCESS_HISTORICAL.out.clean_paired)
