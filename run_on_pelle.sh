@@ -26,9 +26,6 @@ VARIANT_CALLER=freebayes
 CHUNK_SIZE=20
 # output directory 
 OUTDIR=path/to/output_directory
-# account to use for slurm job submission
-SLURM_ACCOUNT=<NAISS_COMPUTE_PROJECT>
-
 
 # run the full pipeline
 nextflow run main.nf --input $INPUT_CSV \
@@ -37,7 +34,7 @@ nextflow run main.nf --input $INPUT_CSV \
     --reads_dir $READS_DIR \
     --scaffold_list $SCAFFOLD_LIST \
     --outdir $OUTDIR \
-    --slurm_account $SLURM_ACCOUNT \
+    --slurm_account $SLURM_JOB_ACCOUNT \
     --variant_caller $VARIANT_CALLER \
     --chunk_size $CHUNK_SIZE
 
