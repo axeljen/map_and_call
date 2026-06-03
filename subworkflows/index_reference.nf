@@ -92,9 +92,9 @@ workflow INDEX_REFERENCE {
     faidx_and_chunks_ch = samtools_index(ch_ref_split.for_samtools)
     //faidx_and_chunks_ch.reference_intervals.view()
     
-    reference_fasta = faidx_and_chunks_ch.reference_fasta.first()
-    reference_fai = faidx_and_chunks_ch.reference_fai.first()
-    reference_gzi = faidx_and_chunks_ch.reference_gzi.first()
+    reference_fasta = faidx_and_chunks_ch.reference_fasta
+    reference_fai = faidx_and_chunks_ch.reference_fai
+    reference_gzi = faidx_and_chunks_ch.reference_gzi
     
     // ─────────────────────────────────────────────────────────────────────────────
     // Parse scaffold list or extract from reference index

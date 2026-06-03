@@ -14,7 +14,7 @@ Mapping and variant calling pipeline developed to handle everything from raw fas
     
 2. Prepare an input samplesheet with one row per sequence pair, and five columns with headers, like so:
     
-        sample_id;library;datatype;read_1;read_2
+        sample_id;library;data_type;read_1;read_2
         sample_1;lib1;1;sample_1_R1.fq.gz;sample_1_R2.fq.gz
         sample_2;lib1;2;sample_2_R1.fq.gz;sample_2_R2.fq.gz
 
@@ -24,11 +24,12 @@ Mapping and variant calling pipeline developed to handle everything from raw fas
 
     **library** is used to differentiate between different libraries sequenced from the same sample. These well be merged prior to deduplication. If the same library was sequenced across different lanes, simply add one row per read pair with the same library name, and the pipeline will handle merging per library after mapping.  
     
-    **datatype** is either 1 for modern sequencing data, or 2 for historical dna (expecting shorter reads and more damage).  
+    **data_type** is either 1 for modern sequencing data, or 2 for historical dna (expecting shorter reads and more damage).  
     
     **read_1/read_2** points to the paths for the fastq files for this sequencing run. Either specify the full path to the reads, or - to keep the input file a bit cleaner - put all reads (or links to them) in a common directory, and point to this directory with the --reads_dir argument when running the pipeline. For example:
 
     Symlink all reads to a common directory:
+
 
         mkdir reads
         for read in $(find /dir/with/raw_data -name "*.fq.gz");

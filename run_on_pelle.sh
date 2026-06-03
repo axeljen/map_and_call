@@ -29,7 +29,7 @@ OUTDIR=path/to/output_directory
 
 # run the full pipeline
 nextflow run main.nf --input $INPUT_CSV \
-    -profile dardel -resume \
+    -profile pelle -resume \
     --reference $REFERENCE \
     --reads_dir $READS_DIR \
     --scaffold_list $SCAFFOLD_LIST \
