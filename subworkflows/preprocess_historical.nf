@@ -85,7 +85,7 @@ workflow PREPROCESS_HISTORICAL {
             def sorted_collapsed = collapsed.sort { a, b -> a.name <=> b.name }
             tuple(sample_id, library, datatype, sorted_collapsed)
         }
-        .branch { sample_id, library, datatype, collapsed ->
+        .branch { _sample_id, _library, _datatype, collapsed ->
             single_lib: collapsed.size() == 1
             multi_lib: collapsed.size() > 1
         }

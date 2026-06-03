@@ -128,7 +128,9 @@ workflow PROCESS_BAMS {
 
     merged_bams = samtools_merge(per_sample_bams.multi
         .map { sample_id, datatype, bam_paths, _bam_indices -> tuple(sample_id, datatype, bam_paths) })
-
+    merged_bams.view {
+        row -> "merged bams: ${row}"
+    }
     all_sample_bams = merged_bams
         .mix(per_sample_bams.single.map { sample_id, datatype, bam_paths, bam_indices ->
             tuple(sample_id, datatype, bam_paths[0], bam_indices[0])

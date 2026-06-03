@@ -51,6 +51,9 @@ workflow MAP_HISTORICAL {
                 return tuple(sample_id, library, datatype, collapsed)
             }
         split_fq_by_length(historical_splitreads_ch)
+        split_fq_by_length.out.longreads.view {
+            row -> "long reads after splitting: ${row}"
+        }
         // map shortreads with bwa aln
         bwa_aln(split_fq_by_length.out.shortreads
             .combine(bwa_index)
@@ -62,13 +65,15 @@ workflow MAP_HISTORICAL {
         // merge the resulting bams
         historical_bams_ch = merge_short_and_long_read_bams(
             bwa_aln.out.bam
-                .mix(map_historical.out.bam)
+                .mix(map_long_historical.out.bam)
                 .groupTuple(by: [0,1,2])
-                .view()
                 .map { sample_id, library, datatype, bam_paths, _bam_indices ->
-                    return tuple(sample_id, library, datatype, bam_paths, "combined")
+                    return tuple(sample_id, library, datatype, bam_paths)
                 }
         )
+        historical_bams_ch.view {
+            row -> "historical bams after merging short and long read mappings: ${row}"
+        } 
     }
     else {
         // otherwise just prep the merged reads for mapping with the specified mapper
