@@ -5,6 +5,7 @@
 process split_fq_by_length {
     tag "$sample_id"
     conda "${moduleDir}/environment.yml"
+    label 'medium_short'
 
     input:
     tuple val(sample_id), val(library), val(datatype), path(reads)

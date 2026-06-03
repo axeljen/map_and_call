@@ -182,7 +182,8 @@ workflow {
         PREPROCESS_HISTORICAL.out.clean_paired,
         PREPROCESS_HISTORICAL.out.clean_merged,
         INDEX_REFERENCE.out.bwa_index,
-        params.map_historical_pairs
+        params.map_historical_pairs,
+        params.historical_mapper
     )
     
     // ═══════════════════════════════════════════════════════════════════════════════
