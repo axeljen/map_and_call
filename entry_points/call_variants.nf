@@ -302,7 +302,7 @@ workflow {
             def max_dp
             
             if (params.min_depth instanceof Integer){
-                min_dp = min_depth
+                min_dp = params.min_depth
             }
             else {
                 min_dp = (autosomal_dp * params.min_depth)
