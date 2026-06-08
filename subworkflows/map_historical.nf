@@ -51,9 +51,6 @@ workflow MAP_HISTORICAL {
                 return tuple(sample_id, library, datatype, collapsed)
             }
         split_fq_by_length(historical_splitreads_ch)
-        split_fq_by_length.out.longreads.view {
-            row -> "long reads after splitting: ${row}"
-        }
         // map shortreads with bwa aln
         bwa_aln(split_fq_by_length.out.shortreads
             .combine(bwa_index)
