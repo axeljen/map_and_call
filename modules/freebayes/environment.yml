@@ -5,4 +5,4 @@ channels:
 dependencies:
   - bioconda::freebayes=1.3.10
   - bioconda::bcftools=1.21
-  - bioconda::samtools=1.23.1
+  - bioconda::samtools=1.21

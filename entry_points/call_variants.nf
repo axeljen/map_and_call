@@ -301,20 +301,29 @@ workflow {
             def min_dp
             def max_dp
             
-            if (params.min_depth instanceof Integer) {
-                min_dp = params.min_depth
-            } else {
+            if (params.min_depth instanceof Integer){
+                min_dp = min_depth
+            }
+            else {
                 min_dp = (autosomal_dp * params.min_depth)
             }
-            if (params.max_depth instanceof Integer) {
+            if (params.max_depth instanceof Integer){
                 max_dp = params.max_depth
-            } else {
+            }
+            else {
                 max_dp = (autosomal_dp * params.max_depth)
             }
-            
+            if (min_dp < 1) {
+                log.warn "Sample ${sample_id}: dynamic min_depth evaluated to ${min_dp} (autosomal depth: ${autosomal_dp}). Setting min_depth to 1."
+                min_dp = 1
+            }
+            if (max_dp < 2) {
+                log.warn "Sample ${sample_id}: dynamic max_depth evaluated to ${max_dp} (autosomal depth: ${autosomal_dp}). Setting max_depth to 2."
+                max_dp = 2
+            }
             tuple(sample_id, min_dp, max_dp, sex_assignment)
         }
-            // Add the sample bedfile to this
+        // Add the sample bedfile to this
         .combine(parse_region_depths.out.sample_depth_beds, by: 0)
     
     // Calculate callable regions

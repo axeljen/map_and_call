@@ -273,9 +273,21 @@ workflow VARIANT_FILTERS {
         .groupTuple(by: 0)
 
     // // Concatenate regional masks into genome-wide files for output
-    homrefs = combine_homref_invariants(region_homrefs, reference_fai, 'homref_invariants')
-    total_mask = combine_mappability_masks(region_totalmask, reference_fai, 'mappability_mask')
-    snp_mask = combine_mappability_masks_snps(region_snpmask, reference_fai, 'snp_mask')
+    homrefs = combine_homref_invariants(
+        region_homrefs
+        .combine(reference_fai)
+        .map { sample_id, bedfiles, fai -> tuple(sample_id, bedfiles, fai, 'homref_invariants') }
+    )
+    total_mask = combine_mappability_masks(
+        region_totalmask
+        .combine(reference_fai)
+        .map { sample_id, bedfiles, fai -> tuple(sample_id, bedfiles, fai, 'mappability_mask') }
+    )
+    snp_mask = combine_mappability_masks_snps(
+        region_snpmask
+        .combine(reference_fai)
+        .map { sample_id, bedfiles, fai -> tuple(sample_id, bedfiles, fai, 'snp_mask') }
+    )
 
     emit:
     filtered_snps = bcftools_concat_snps.out.vcf

@@ -201,11 +201,6 @@ workflow PROCESS_BAMS {
     region_depths = samtools_dp(dp_input_ch)
         .groupTuple(by: 0)
 
-    region_depths.view {
-        row -> "region depths: ${row}"
-    }
-
-
     sample_depths = calculate_depth_and_sex(
         parse_region_depths(region_depths, reference_fai).sample_depth_avg,
         sex_limited_list,
@@ -327,9 +322,6 @@ workflow PROCESS_BAMS {
         .combine(reference_fai)
 
     mappability_mask = callable_regions(callable_regions_input)
-    parse_region_depths.out.sample_depth_avg.view {
-        row -> "mapping depths: ${row}"
-    }
 
     emit:
     final_bam = bams_for_calling_ch

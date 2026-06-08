@@ -6,9 +6,7 @@ process combine_bedfiles {
     //publishDir "${params.outdir}/03_genotypes", mode: 'copy'
     
     input:
-    tuple val(sample_id), path(bedfiles)
-    each path(reference_fai)
-    each val(name)
+    tuple val(sample_id), path(bedfiles), path(reference_fai), val(name)
     
     output:
     tuple val(sample_id), path("${sample_id}_${name}.bed"), emit: bedfile

@@ -68,9 +68,6 @@ workflow MAP_HISTORICAL {
                     return tuple(sample_id, library, datatype, bam_paths)
                 }
         )
-        historical_bams_ch.view {
-            row -> "historical bams after merging short and long read mappings: ${row}"
-        } 
     }
     else {
         // otherwise just prep the merged reads for mapping with the specified mapper
