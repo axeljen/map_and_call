@@ -2,15 +2,15 @@
 
 #SBATCH -A <NAISS_COMPUTE_PROJECT>
 #SBATCH -p shared
-#SBATCH -c 4
+#SBATCH -c 3
 #SBATCH -t 5-00:00:00
 #SBATCH -J map-and-call
 #SBATCH --mail-type=FAIL
 #SBATCH -o ./logs/%x-%j.out
 #SBATCH -e ./logs/%x-%j.error
 
-# Load nextflow and modules
-ml PDC/24.11 nextflow miniconda3
+# load nextflow and modules
+ml Nextflow Miniforge3 Mamba/23.11.0-0
 
 # Path to input file with sample and read information, see readme for details.
 INPUT_CSV='/path/to/input.csv'
@@ -41,17 +41,17 @@ OUTDIR='/path/to/output_directory'
 
 # Run the full pipeline.
 # Change to full path to main.nf if run from outside the map_and_call folder.
-nextflow run main.nf \
-    -profile 'pelle' \
-    -resume \
-    --input "$INPUT_CSV" \
-    --reference "$REFERENCE" \
-    --reads_dir "$READS_DIR" \
-    --scaffold_list "$SCAFFOLD_LIST" \
-    --outdir "$OUTDIR" \
-    --slurm_account "$SLURM_JOB_ACCOUNT" \
-    --variant_caller "$VARIANT_CALLER" \
-    --chunk_size "$CHUNK_SIZE"
+
+# run the full pipeline
+nextflow run main.nf --input $INPUT_CSV \
+    -profile pelle -resume \
+    --reference $REFERENCE \
+    --reads_dir $READS_DIR \
+    --scaffold_list $SCAFFOLD_LIST \
+    --outdir $OUTDIR \
+    --slurm_account $SLURM_ACCOUNT \
+    --variant_caller $VARIANT_CALLER \
+    --chunk_size $CHUNK_SIZE
 
 ##### Some additional, potentially useful flags:
 
