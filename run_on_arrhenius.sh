@@ -54,6 +54,7 @@ OUTDIR='/path/to/output_directory'
 nextflow run main.nf \
     -profile 'arrhenius' \
     -resume \
+    --use_mamba \
     --input "$INPUT_CSV" \
     --reference "$REFERENCE" \
     --reads_dir "$READS_DIR" \
@@ -66,8 +67,8 @@ nextflow run main.nf \
 ##### Some additional, potentially useful flags:
 
 ## --skip_premapping_dedup
-# By default, a a pcr deduplication step is run first on the raw reads, and then
-# again on the mapped reads in the bam file.  in modern data with reasonably low
+# By default, a PCR deduplication step is run first on the raw reads, and then
+# again on the mapped reads in the bam file. In modern data with reasonably low
 # levels of duplication rates (say, < ~ 30 %), this is most likely redundant and
 # could potentially even lead to over-deduplication and loss of data. So for
 # modern, high quality data, this flag is recommended.
@@ -79,11 +80,6 @@ nextflow run main.nf \
 # to a dedicated location that you can then reuse for subseqeunt runs in
 # different directories. Then, the environments doesn't need to be recreated.
 # See also the NXF_CONDA_CACHEDIR variable above.
-
-## --use_mamba
-# If you have a local installation of mamba, this argument will save some time
-# when creating the conda environments.  mamba is not available as a module on
-# dardel, so the default is to use conda.
 
 ## -work-dir
 # To save disk-file quota, one may try to write the work directory to a
