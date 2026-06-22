@@ -21,7 +21,6 @@ include { VARIANT_FILTERS } from './subworkflows/variant_filters'
 include { parse_summary_stats } from './modules/summary_stats/parse_summary_stats'
 include { combine_summary_tables } from './modules/summary_stats/combine_summary_files'
 
-
 // ═══════════════════════════════════════════════════════════════════════════════
 //                      UTILITY FUNCTIONS & HELPERS
 //
@@ -41,11 +40,11 @@ def parse_input(metadata_file) {
             def data_type = row.data_type
             def sample_id = row.sample_id
             def library = row.library
-            
+
             // Construct read paths based on params.reads_dir
             def read_1_path = params.reads_dir ? "${params.reads_dir}/${row.read_1}" : row.read_1
             def read_2_path = params.reads_dir ? "${params.reads_dir}/${row.read_2}" : row.read_2
-            
+
             def read_1 = file(read_1_path, checkIfExists: true)
             def read_2 = file(read_2_path, checkIfExists: true)
             return [sample_id, data_type, library, read_1, read_2]
@@ -134,10 +133,10 @@ def calculate_depth_and_sex(depth_avg_ch, sex_limited_list, non_sex_limited_list
             def autosome_depth = depth_map.get('autosomes', 0.0)
             def non_sex_limited_depth = depth_map.get('non_sex_limited', 0.0)
             def sex_limited_depth = depth_map.get('sex_limited', 0.0)
-            
-            def ratio = (autosome_depth > 0 && non_sex_limited_depth > 0) ? 
+
+            def ratio = (autosome_depth > 0 && non_sex_limited_depth > 0) ?
                         non_sex_limited_depth / autosome_depth : 0.0
-            
+
             def sex = 'unknown'
             if (ratio > 0) {
                 if (ratio < params.sex_assignment_lower_threshold) {
@@ -150,7 +149,7 @@ def calculate_depth_and_sex(depth_avg_ch, sex_limited_list, non_sex_limited_list
                     sex = 'homozygous'
                 }
             }
-            
+
             tuple(sample, autosome_depth, non_sex_limited_depth, sex_limited_depth, ratio, sex)
         }
 }
@@ -164,7 +163,7 @@ def get_filter_expressions(caller_type, custom_snp=null, custom_indel=null) {
     if (custom_snp && custom_indel) {
         return [snp_filter_expr: custom_snp, indel_filter_expr: custom_indel]
     }
-    
+
     // Otherwise, return defaults based on variant caller
     if (caller_type in ['gatk_joint', 'gatk_haplotypecaller']) {
         return [snp_filter_expr: params.snp_filter_expression_gatk, indel_filter_expr: params.indel_filter_expression_gatk]
@@ -191,7 +190,7 @@ def setup_sex_chromosome_system() {
         sex_limited_list: [],
         non_sex_limited_list: []
     ]
-    
+
     if (params.x_scaffolds || params.y_scaffolds) {
         if (params.z_scaffolds || params.w_scaffolds) {
             error "Please only specify either X and/or Y, OR Z and/or W scaffolds, not both."
@@ -207,7 +206,7 @@ def setup_sex_chromosome_system() {
         result.sex_limited_list = [params.w_scaffolds].flatten()
         result.non_sex_limited_list = [params.z_scaffolds].flatten()
     }
-    
+
     return result
 }
 
@@ -216,11 +215,11 @@ def setup_sex_chromosome_system() {
  */
 workflow {
     main:
-    
+
     // ═══════════════════════════════════════════════════════════════════════════════
     //                     SETUP: Configuration and Input Parsing
     // ═══════════════════════════════════════════════════════════════════════════════
-    
+
     // Setup sex chromosome system based on user parameters
     sex_config = setup_sex_chromosome_system()
     def sex_chrom_system = sex_config.sex_chrom_system
@@ -229,14 +228,14 @@ workflow {
     def non_sex_limited_list = sex_config.non_sex_limited_list
     println "Sex-limited contigs: ${sex_limited_list}"
     println "Non-sex-limited contigs: ${non_sex_limited_list}"
-    
+
     // Validate variant caller parameter
     if (!['gatk_joint','gatk_haplotypecaller','freebayes','bcftools'].contains(params.variant_caller)) {
         error "Unsupported variant caller specified: ${params.variant_caller}. Must be one of gatk_joint, gatk_haplotypecaller, freebayes or bcftools."
     }
-    
+
     println "Inferred sex chromosome system based on user specifications: ${sex_chrom_system}"
-    
+
     // Create channels for sex-linked contigs
     sex_linked_contigs = channel.value(sex_linked_list)
     sex_limited_contigs = channel.value(sex_limited_list)
@@ -249,14 +248,14 @@ workflow {
             modern: data_type == '1'
             historical: data_type == '2'
         }
-        
+
     // Reference genome
     ch_reference = channel.fromPath(params.reference, checkIfExists: true)
 
     // ═══════════════════════════════════════════════════════════════════════════════
     //                     SUBWORKFLOW 1: INDEX REFERENCE
     // ═══════════════════════════════════════════════════════════════════════════════
-    
+
     INDEX_REFERENCE(
         ch_reference,
         params.scaffold_list,
@@ -270,7 +269,7 @@ workflow {
     // ═══════════════════════════════════════════════════════════════════════════════
     //                     SUBWORKFLOW 2-3: PREPROCESS READS
     // ═══════════════════════════════════════════════════════════════════════════════
-    
+
     PREPROCESS_MODERN(
         ch_input.modern,
         params.premapping_dedup
@@ -285,7 +284,7 @@ workflow {
     multiqc_rawreads_report = PREPROCESS_MODERN.out.multiqc_raw_report
         .mix(PREPROCESS_HISTORICAL.out.multiqc_raw_report)
         .collect()
-    
+
     multiqc_cleanreads_report = PREPROCESS_MODERN.out.multiqc_clean_report
         .mix(PREPROCESS_HISTORICAL.out.multiqc_clean_report)
         .collect()
@@ -297,7 +296,7 @@ workflow {
     // ═══════════════════════════════════════════════════════════════════════════════
     //                     SUBWORKFLOW 4-5: MAP READS
     // ═══════════════════════════════════════════════════════════════════════════════
-    
+
     MAP_MODERN(
         PREPROCESS_MODERN.out.clean_reads,
         INDEX_REFERENCE.out.bwa_index,
@@ -315,7 +314,7 @@ workflow {
     // ═══════════════════════════════════════════════════════════════════════════════
     //                     SUBWORKFLOW 6: ESTIMATE DEPTH & POST-PROCESS BAMS
     // ═══════════════════════════════════════════════════════════════════════════════
-    
+
     PROCESS_BAMS(
         MAP_MODERN.out.bam,
         MAP_HISTORICAL.out.bam,
@@ -346,18 +345,18 @@ workflow {
                 return tuple(sample_id, autosomal_dp, non_sex_limited_dp, sex_limited_dp, ratio, sex_assignment, 'NA', 'NA', 'NA')
             }
         }
-    
+
     // Add downsampled stats if downsampling was performed
     if (params.downsample_bams) {
         sample_stats = PROCESS_BAMS.out.sample_depths
             .combine(PROCESS_BAMS.out.sample_depths_downsampled, by: 0)
-            .map { sample_id, autosomal_dp, non_sex_limited_dp, sex_limited_dp, ratio, sex_assignment, 
+            .map { sample_id, autosomal_dp, non_sex_limited_dp, sex_limited_dp, ratio, sex_assignment,
                    ds_autosomal_dp, ds_non_sex_limited_dp, ds_sex_limited_dp, ds_ratio, ds_sex_assignment ->
                 if (sex_chrom_system == 'unknown') {
                     return tuple(sample_id, autosomal_dp, 'NA', 'NA', 'NA', 'NA', ds_autosomal_dp, 'NA', 'NA')
                 } else {
-                    return tuple(sample_id, autosomal_dp, non_sex_limited_dp, sex_limited_dp, ratio, sex_assignment, 
-                                ds_autosomal_dp, ds_non_sex_limited_dp, ds_sex_limited_dp)
+                    return tuple(sample_id, autosomal_dp, non_sex_limited_dp, sex_limited_dp, ratio, sex_assignment,
+                                 ds_autosomal_dp, ds_non_sex_limited_dp, ds_sex_limited_dp)
                 }
             }
     }
