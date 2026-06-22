@@ -15,32 +15,32 @@ process bwa_aln {
 
     script:
     """
-    # extract the read group string from the fasta header
-    HEADER=\$(zcat ${reads} | head -1 | sed 's/^@//')
+    ## extract the read group string from the fasta header
+    # HEADER=\$(zcat ${read1} | head -1 | sed 's/^@//')
     
-    # detect platform/read group info format
-    # Detect format by structure
-    if echo "\$HEADER" | grep -qP '^\\S+:\\d+:[A-Z0-9]+:\\d+:'; then
-        # Illumina Casava 1.8+ : instrument:run:flowcell:lane:tile:x:y
-        PLATFORM="ILLUMINA"
-        FLOWCELL=\$(echo "\$HEADER" | cut -d':' -f3)
-        LANE=\$(echo "\$HEADER" | cut -d':' -f4)
-    elif echo "\$HEADER" | grep -qP 'L\\d+C\\d+R\\d+'; then
-        # BGI/MGI: {flowcell}L{lane}C{col}R{row}{read}
-        PLATFORM="BGI"
-        FLOWCELL=\$(echo "\$HEADER" | sed 's/L[0-9]\\+.*//' | sed 's|/.*||')
-        LANE=\$(echo "\$HEADER" | grep -oP '(?<=L)\\d+' | head -1)
-    else
-        # Old Illumina or unknown: instrument:lane:tile:x:y
-        PLATFORM="ILLUMINA"
-        FLOWCELL=\$(echo "\$HEADER" | cut -d':' -f1)
-        LANE=\$(echo "\$HEADER" | cut -d':' -f2)
-    fi
+    ## detect platform/read group info format
+    ## Detect format by structure
+    #if echo "\$HEADER" | grep -qP '^\\S+:\\d+:[A-Z0-9]+:\\d+:'; then
+    #    # Illumina Casava 1.8+ : instrument:run:flowcell:lane:tile:x:y
+    #    PLATFORM="ILLUMINA"
+    #    FLOWCELL=\$(echo "\$HEADER" | cut -d':' -f3)
+    #    LANE=\$(echo "\$HEADER" | cut -d':' -f4)
+    #elif echo "\$HEADER" | grep -qP 'L\\d+C\\d+R\\d+'; then
+    #    # BGI/MGI: {flowcell}L{lane}C{col}R{row}{read}
+    #    PLATFORM="BGI"
+    #    FLOWCELL=\$(echo "\$HEADER" | sed 's/L[0-9]\\+.*//' | sed 's|/.*||')
+    #    LANE=\$(echo "\$HEADER" | grep -oP '(?<=L)\\d+' | head -1)
+    #else
+    #    # Old Illumina or unknown: instrument:lane:tile:x:y
+    #    PLATFORM="ILLUMINA"
+    #    FLOWCELL=\$(echo "\$HEADER" | cut -d':' -f1)
+    #    LANE=\$(echo "\$HEADER" | cut -d':' -f2)
+    #fi
 
-    FLOWCELL=\$(echo \$HEADER | cut -d':' -f3)
-    LANE=\$(echo \$HEADER | cut -d':' -f4)
-    RGID="${sample_id}_\${FLOWCELL}.\${LANE}"
-    PU="\${FLOWCELL}.\${LANE}"
+    FLOWCELL="fc1"
+    LANE="${sample_id}_${library}"
+    RGID="${sample_id}_${library}"
+    PU="illumina"
     SAMPLE="${sample_id}"
 
     rg="@RG\\tID:\${RGID}\\tSM:\${SAMPLE}\\tLB:\${SAMPLE}\\tPL:\${PLATFORM}\\tPU:\${PU}"
