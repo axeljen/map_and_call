@@ -1,3 +1,4 @@
+private/*
 .nextflow*
 testfiles
 results
@@ -6,6 +7,7 @@ work
 .envs
 *.error
 *.out
+*.swp
 .vscode
 *.html
 test

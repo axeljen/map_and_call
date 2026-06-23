@@ -1,25 +1,28 @@
 #!/bin/bash -l
 
 #SBATCH -A <NAISS_COMPUTE_PROJECT>
-#SBATCH -p shared
+#SBATCH -p cpu
 #SBATCH -c 4
-#SBATCH -t 5-00:00:00
+#SBATCH -t 3-00:00:00
 #SBATCH -J map-and-call
 #SBATCH --mail-type=FAIL
 #SBATCH -o ./logs/%x-%j.out
 #SBATCH -e ./logs/%x-%j.error
 
-# Load nextflow and modules
-ml PDC/24.11 nextflow miniconda3
+# Load modules for nextflow and conda/mamba. Module names as per 2026-06-17.
+ml buildtool-easybuild/5.2.1-hpca3ef7d197
+ml Java/25.0.3-bdist
+ml Nextflow/25.10.6-eb
+ml Miniforge3/26.3.2-2
 
 # Path to input file with sample and read information, see readme for details.
 INPUT_CSV='/path/to/input.csv'
 
 # Path to reference genome (fasta format).
-REFERENCE='/path/to/reference_genome.fa'
+REFERENCE='/path/to/reference_genome.fna'
 
 # Path to reads directory. this argument can be omitted if full paths to reads
-# are provided in the input csv (if so, remove the `--reads_dir` argument from
+# are provided in the input csv (if so, remove the --reads_dir argument from
 # the command below).
 READS_DIR='/path/to/reads_directory'
 
@@ -36,14 +39,22 @@ VARIANT_CALLER='freebayes'
 # stuck in the queue perhaps.
 CHUNK_SIZE=20
 
-# Output directory (created if not present)
+# Output directory (created if not present).
 OUTDIR='/path/to/output_directory'
+
+# Conda tmp/cache files. Enable to save file-disk quota. Suitable place  for
+# these folders is in your project directory.
+#export NXF_CONDA_CACHEDIR="/path/to/NXF_CONDA_CACHEDIR"
+#export CONDA_PKGS_DIRS="/path/to/CONDA_PKGS_DIRS"
+#export CONDA_ENVS_PATH="/path/to/CONDA_ENVS_PATH"
+#mkdir -p "$NXF_CONDA_CACHEDIR" "$CONDA_PKGS_DIRS" "$CONDA_ENVS_PATH"
 
 # Run the full pipeline.
 # Change to full path to main.nf if run from outside the map_and_call folder.
 nextflow run main.nf \
-    -profile 'dardel' \
+    -profile 'arrhenius' \
     -resume \
+    --use_mamba \
     --input "$INPUT_CSV" \
     --reference "$REFERENCE" \
     --reads_dir "$READS_DIR" \
@@ -56,8 +67,8 @@ nextflow run main.nf \
 ##### Some additional, potentially useful flags:
 
 ## --skip_premapping_dedup
-# By default, a a pcr deduplication step is run first on the raw reads, and then
-# again on the mapped reads in the bam file.  in modern data with reasonably low
+# By default, a PCR deduplication step is run first on the raw reads, and then
+# again on the mapped reads in the bam file. In modern data with reasonably low
 # levels of duplication rates (say, < ~ 30 %), this is most likely redundant and
 # could potentially even lead to over-deduplication and loss of data. So for
 # modern, high quality data, this flag is recommended.
@@ -69,11 +80,6 @@ nextflow run main.nf \
 # to a dedicated location that you can then reuse for subseqeunt runs in
 # different directories. Then, the environments doesn't need to be recreated.
 # See also the NXF_CONDA_CACHEDIR variable above.
-
-## --use_mamba
-# If you have a local installation of mamba, this argument will save some time
-# when creating the conda environments.  mamba is not available as a module on
-# dardel, so the default is to use conda.
 
 ## -work-dir
 # To save disk-file quota, one may try to write the work directory to a

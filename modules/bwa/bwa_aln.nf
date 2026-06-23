@@ -16,7 +16,7 @@ process bwa_aln {
     script:
     """
     ## extract the read group string from the fasta header
-    # HEADER=\$(zcat ${read1} | head -1 | sed 's/^@//')
+    # HEADER=\$(zcat ${reads} | head -1 | sed 's/^@//')
     
     ## detect platform/read group info format
     ## Detect format by structure
@@ -42,6 +42,7 @@ process bwa_aln {
     RGID="${sample_id}_${library}"
     PU="illumina"
     SAMPLE="${sample_id}"
+    PLATFORM="ILLUMINA"
 
     rg="@RG\\tID:\${RGID}\\tSM:\${SAMPLE}\\tLB:\${SAMPLE}\\tPL:\${PLATFORM}\\tPU:\${PU}"
 

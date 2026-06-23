@@ -42,6 +42,7 @@ process bwa_mem {
     RGID="${sample_id}_${library}"
     PU="illumina"
     SAMPLE="${sample_id}"
+    PLATFORM="ILLUMINA"
 
     rg="@RG\\tID:\${RGID}\\tSM:\${SAMPLE}\\tLB:\${SAMPLE}\\tPL:\${PLATFORM}\\tPU:\${PU}"
 
@@ -104,7 +105,7 @@ process bwa_mem_singlereads {
     RGID="${sample_id}_${library}"
     PU="illumina"
     SAMPLE="${sample_id}"
-
+    PLATFORM="ILLUMINA"
     rg="@RG\\tID:\${RGID}\\tSM:\${SAMPLE}\\tLB:${library}\\tPL:\${PLATFORM}\\tPU:\${PU}"
 
     bwa mem \
