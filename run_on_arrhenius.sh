@@ -10,10 +10,10 @@
 #SBATCH -e ./logs/%x-%j.error
 
 # Load modules for nextflow and conda/mamba. Module names as per 2026-06-17.
-ml buildtool-easybuild/5.2.1-hpca3ef7d197
-ml Java/25.0.3-bdist
-ml Nextflow/25.10.6-eb
-ml Miniforge3/26.3.2-2
+module load buildtool-easybuild/5.2.1-hpca3ef7d197
+module load Miniforge3/26.3.2-2
+module load Nextflow/25.10.6-eb
+module load Java/25.0.3-bdist
 
 # Path to input file with sample and read information, see readme for details.
 INPUT_CSV='/path/to/input.csv'
