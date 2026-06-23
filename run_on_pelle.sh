@@ -1,7 +1,7 @@
 #!/bin/bash -l
 
 #SBATCH -A <NAISS_COMPUTE_PROJECT>
-#SBATCH -p shared
+#SBATCH -p pelle
 #SBATCH -c 3
 #SBATCH -t 5-00:00:00
 #SBATCH -J map-and-call
