@@ -19,7 +19,7 @@ process dochunks {
     def scaffold_list = scaffolds.join(' ')
     """
     # make a temporary file listing the scaffolds to be chunked
-    for scaffold in ${scaffold_list};
+    for scaffold in '${scaffold_list}';
         do 
         echo \$scaffold >> scaffolds_to_chunk.txt
     done
