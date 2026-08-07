@@ -16,3 +16,4 @@ output
 freebayes_testrun
 testrun_on_dardel.sh
 run_on_pelle_test.sh
+testrun_on_pelle.sh
