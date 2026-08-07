@@ -97,13 +97,14 @@ def calculate_depth_and_sex(depth_avg_ch, sex_limited_list, non_sex_limited_list
             sample, file ->
                 file.splitCsv(header: false, sep: '\t').collect { row ->
                     def chrom = row[0]
+                    def chrom_length = row[1].toDouble()
                     def avg_depth = row[2].toDouble()
-                    return tuple(sample, chrom, avg_depth)
+                    return tuple(sample, chrom, chrom_length, avg_depth)
                 }
         }
         // Categorize chromosomes
         .map {
-            sample, chrom, avg_depth ->
+            sample, chrom, chrom_length, avg_depth ->
                 def category = 'autosomes'
                 if (sex_limited_list.contains(chrom)) {
                     category = 'sex_limited'
@@ -111,12 +112,15 @@ def calculate_depth_and_sex(depth_avg_ch, sex_limited_list, non_sex_limited_list
                 if (non_sex_limited_list.contains(chrom)) {
                     category = 'non_sex_limited'
                 }
-                return tuple(sample, chrom, avg_depth, category)
+                return tuple(sample, chrom, chrom_length, avg_depth, category)
         }
-        // Group by sample and category, calculate average depth per category
-        .groupTuple(by: [0, 3])
-        .map { sample, chroms, values, category ->
-            def avg_depth = values.sum() / values.size()
+        // Group by sample and category, calculate weighted average depth per category
+        .groupTuple(by: [0, 4])
+        .map { sample, chroms, lengths, values, category ->
+            // Weighted average: sum(depth * length) / sum(length)
+            def total_bases = [lengths, values].transpose().collect { len, depth -> len * depth }.sum()
+            def total_length = lengths.sum()
+            def avg_depth = total_length > 0 ? total_bases / total_length : 0.0
             return tuple(sample, [(category): avg_depth])
         }
         .groupTuple(by: 0)
