@@ -130,13 +130,18 @@ workflow INDEX_REFERENCE {
             non_sex_limited: [x_scaffolds, z_scaffolds].flatten().contains(scaffold)
         }
 
+    scaffold_list = scaffolds.autosomes
+        .mix(scaffolds.sex_limited)
+        .mix(scaffolds.non_sex_limited)
+        .collect()
+
     // ─────────────────────────────────────────────────────────────────────────────
     // Generate reference intervals for parallel processing
     // ─────────────────────────────────────────────────────────────────────────────
     reference_intervals = dochunks(
         samtools_index.out.reference_fai, 
         chunk_size, 
-        scaffolds_ch.flatten().toList()
+        scaffold_list
     )
 
     // Format intervals into tuples with region IDs
