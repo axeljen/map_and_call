@@ -1,4 +1,5 @@
 process finalize_masks {
+    scratch params.use_scratch
     tag "finalize_masks"
     label 'medium_short'
     conda "${moduleDir}/environment.yml"

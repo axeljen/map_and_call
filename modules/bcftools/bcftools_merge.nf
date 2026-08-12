@@ -1,5 +1,6 @@
 
 process bcftools_merge {
+    scratch params.use_scratch
     tag "$region_id"
     label 'thin_medium'
     conda "${moduleDir}/environment.yml"

@@ -3,6 +3,7 @@
  */
 
 process gatk_mark_duplicates {
+    scratch params.use_scratch
     tag "$sample_id"
     label 'process_medium'
     conda "${moduleDir}/environment.yml"

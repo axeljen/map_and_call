@@ -1,5 +1,6 @@
 // Merge bam alignments generated from different sequencing runs/lanes for the same sample
 process samtools_merge {
+    scratch params.use_scratch
     tag "$sample_id"
     conda "${moduleDir}/environment.yml"
 

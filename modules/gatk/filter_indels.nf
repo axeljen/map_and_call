@@ -3,6 +3,7 @@
  */
 
 process filter_indels {
+    scratch params.use_scratch
     tag "filter_indels"
     label 'process_medium'
     conda "${moduleDir}/environment.yml"

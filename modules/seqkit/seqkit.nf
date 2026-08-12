@@ -3,6 +3,7 @@
  */
 
 process split_fq_by_length {
+    scratch params.use_scratch
     tag "$sample_id"
     conda "${moduleDir}/environment.yml"
     label 'medium_short'

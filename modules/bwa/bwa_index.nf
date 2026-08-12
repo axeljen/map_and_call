@@ -3,6 +3,7 @@
  */
 
 process bwa_index {
+    scratch params.use_scratch
     tag "$reference"
     conda "${moduleDir}/environment.yml"
 

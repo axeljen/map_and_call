@@ -3,6 +3,7 @@
  */
 
 process haplotype_caller_erc {
+    scratch params.use_scratch
     tag "$sample_id"
     label 'process_high'
     conda "${moduleDir}/environment.yml"

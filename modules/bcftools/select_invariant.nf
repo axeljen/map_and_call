@@ -1,4 +1,5 @@
 process select_invariant {
+    scratch params.use_scratch
     tag "select_invariant"
     label 'thin_short'
     conda "${moduleDir}/environment.yml"

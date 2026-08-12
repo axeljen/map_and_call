@@ -1,6 +1,7 @@
 // Check 
 
 process damage_profiler_rescale {
+    scratch params.use_scratch
     tag "$sample_id"
     conda "${moduleDir}/environment.yml"
 

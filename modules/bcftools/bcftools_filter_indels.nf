@@ -1,4 +1,5 @@
 process bcftools_filter_indels {
+    scratch params.use_scratch
     tag "filter_indels"    
     label 'thin_medium'
     conda "${moduleDir}/environment.yml"

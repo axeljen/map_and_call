@@ -1,4 +1,5 @@
 process samtools_dp {
+    scratch params.use_scratch
     tag "samtools_dp"
     conda "${moduleDir}/environment.yml"
 

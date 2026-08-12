@@ -3,6 +3,7 @@
  */
 
 process create_sequence_dict {
+    scratch params.use_scratch
     tag "$reference"
     label 'process_low'
     conda "${moduleDir}/environment.yml"

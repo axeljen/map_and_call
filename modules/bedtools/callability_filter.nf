@@ -1,4 +1,5 @@
 process callability_filter {
+    scratch params.use_scratch
     tag "vcf_depth_filter_sample"
     conda "${moduleDir}/environment.yml"
     label "thin_medium"

@@ -1,4 +1,5 @@
 process mappability_filter {
+    scratch params.use_scratch
     tag "mappability_filter"
     label 'medium_medium'
     conda "${moduleDir}/environment.yml"

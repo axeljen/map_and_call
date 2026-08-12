@@ -3,6 +3,7 @@
  */
 
 process bwa_mem {
+    scratch params.use_scratch
     tag "$sample_id"
     conda "${moduleDir}/environment.yml"
 
@@ -67,6 +68,7 @@ process bwa_mem {
 
 
 process bwa_mem_singlereads {
+    scratch params.use_scratch
     tag "$sample_id"
     conda "${moduleDir}/environment.yml"
 

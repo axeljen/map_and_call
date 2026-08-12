@@ -3,6 +3,7 @@
  */
 
 process haplotype_caller {
+    scratch params.use_scratch
     tag "$sample_id"
     label 'process_low'
     conda "${moduleDir}/environment.yml"

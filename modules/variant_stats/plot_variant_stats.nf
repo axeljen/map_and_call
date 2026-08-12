@@ -1,4 +1,5 @@
 process plot_variant_stats {
+    scratch params.use_scratch
     tag "plot_variant_stats_${category}"
     label 'thin_short'
     conda "${moduleDir}/environment.yml"

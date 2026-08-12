@@ -1,4 +1,5 @@
 process genotype_gvcfs_combined {
+    scratch params.use_scratch
     tag "combine_gvcfs"
     label 'process_high'
     conda "${moduleDir}/environment.yml"

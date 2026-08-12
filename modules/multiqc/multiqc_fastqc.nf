@@ -1,4 +1,5 @@
 process multiqc_fastqc {
+    scratch params.use_scratch
     label 'thin_short'
     conda "${moduleDir}/environment.yml"
 

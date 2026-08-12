@@ -1,4 +1,5 @@
 process combine_bedfiles {
+    scratch params.use_scratch
     tag "combine_bedfiles"
     label 'medium_short'
     conda "${moduleDir}/environment.yml"

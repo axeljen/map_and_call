@@ -1,5 +1,6 @@
 
 process mpileup{
+    scratch params.use_scratch
     tag "$reference"
     conda "${moduleDir}/environment.yml"
 

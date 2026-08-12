@@ -1,5 +1,6 @@
 
 process bcftools_norm {
+    scratch params.use_scratch
     tag "normalize_vcfs"
     conda "${moduleDir}/environment.yml"
 

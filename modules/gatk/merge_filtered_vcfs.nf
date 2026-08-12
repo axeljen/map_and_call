@@ -3,6 +3,7 @@
  */
 
 process merge_filtered_vcfs {
+    scratch params.use_scratch
     tag "merge_vcfs"
     label 'process_medium'
     conda "${moduleDir}/environment.yml"

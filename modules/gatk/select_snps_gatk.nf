@@ -3,6 +3,7 @@
  */
 
 process select_snps_gatk {
+    scratch params.use_scratch
     tag "select_snps"
     label 'process_medium'
     conda "${moduleDir}/environment.yml"

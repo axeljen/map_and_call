@@ -1,4 +1,5 @@
 process ab_dp_filter {
+    scratch params.use_scratch
     tag "ab_dp_filter"
     label 'medium_medium'
     conda "${moduleDir}/environment.yml"

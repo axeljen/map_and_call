@@ -1,6 +1,7 @@
 // Process to concatenate readpairs stemming from the same library, prior to deduplication.
 
 process concat_reads {
+    scratch params.use_scratch
     tag "$sample_id"
     label 'thin_short'
 
@@ -24,6 +25,7 @@ process concat_reads {
 }
 
 process concat_collapsed {
+    scratch params.use_scratch
     tag "$sample_id"
     label 'thin_short'
 

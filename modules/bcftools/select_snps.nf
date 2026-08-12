@@ -1,4 +1,5 @@
 process select_snps {
+    scratch params.use_scratch
     tag "select_snps"
     label 'thin_short'
     conda "${moduleDir}/environment.yml"

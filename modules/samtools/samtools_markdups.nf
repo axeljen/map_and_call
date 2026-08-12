@@ -1,4 +1,5 @@
 process samtools_markdups {
+    scratch params.use_scratch
     tag "$sample_id"
     conda "${moduleDir}/environment.yml"
 

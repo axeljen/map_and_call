@@ -1,5 +1,6 @@
 
 process bcftools_concat {
+    scratch params.use_scratch
     tag "concat_vcfs"
     label 'thin_medium'
     conda "${moduleDir}/environment.yml"

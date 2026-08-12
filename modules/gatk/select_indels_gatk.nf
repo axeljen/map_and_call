@@ -3,6 +3,7 @@
  */
 
 process select_indels_gatk {
+    scratch params.use_scratch
     tag "select_indels"
     label 'process_medium'
     conda "${moduleDir}/environment.yml"

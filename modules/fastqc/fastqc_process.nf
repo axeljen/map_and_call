@@ -3,6 +3,7 @@
  */
 
 process fastqc {
+    scratch params.use_scratch
     tag "$sample_id"
     label 'medium_short'
     conda "${moduleDir}/environment.yml"

@@ -1,4 +1,5 @@
 process parse_summary_stats {
+    scratch params.use_scratch
     tag "parse_summary_stats"
     label 'thin_short'
     // conda "${moduleDir}/environment.yml"

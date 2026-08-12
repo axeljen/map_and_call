@@ -1,4 +1,5 @@
 process callable_regions {
+    scratch params.use_scratch
     tag "callable_regions"
     label 'medium_short'
     conda "${moduleDir}/environment.yml"

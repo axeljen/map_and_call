@@ -1,6 +1,7 @@
 
 
 process samtools_bam2cram {
+    scratch params.use_scratch
     tag "samtools_bam2cram_${sample}"
     label 'medium_medium'
     conda "${moduleDir}/environment.yml"

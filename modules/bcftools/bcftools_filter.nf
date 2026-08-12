@@ -1,4 +1,5 @@
 process bcftools_filter {
+    scratch params.use_scratch
     tag "filter_vcf"
     label 'thin_medium'
     conda "${moduleDir}/environment.yml"

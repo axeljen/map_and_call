@@ -1,4 +1,5 @@
 process ab_filter {
+    scratch params.use_scratch
     tag "ab_filter"
     label 'thin_medium'
     conda "${moduleDir}/environment.yml"

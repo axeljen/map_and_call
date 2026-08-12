@@ -1,4 +1,5 @@
 process combine_summary_tables {
+    scratch params.use_scratch
     tag "combine_summary_tables"
     label 'thin_short'
     // conda "${moduleDir}/environment.yml"

@@ -3,6 +3,7 @@
  */
 
 process filter_snps {
+    scratch params.use_scratch
     tag "filter_snps"
     label 'process_medium'
     conda "${moduleDir}/environment.yml"

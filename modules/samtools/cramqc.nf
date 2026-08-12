@@ -1,6 +1,7 @@
 // Module for running some qc on the final processed bam/cram files
 
 process cramqc {
+    scratch params.use_scratch
     tag "$sample_id"
     label 'medium_medium'
     conda "${moduleDir}/environment.yml"
