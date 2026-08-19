@@ -1,6 +1,7 @@
 process samtools_dp {
     scratch params.use_scratch
     tag "samtools_dp"
+    
     conda "${moduleDir}/environment.yml"
 
     input:
@@ -13,6 +14,8 @@ process samtools_dp {
     def region_list = regions.join(' ')
     
     """
+    set -o pipefail
+    
     for region in ${region_list};
         do
         samtools depth -r \${region} -Q ${params.min_mapqual} -q ${params.min_basequal} -a ${cram} | \

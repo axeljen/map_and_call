@@ -381,7 +381,8 @@ workflow {
             params.variant_caller,
             params.popfile,
             sample_stats,
-            params.store_raw_vcf
+            params.store_raw_vcf,
+            PROCESS_BAMS.out.raw_crams
         )
 
         VARIANT_FILTERS(

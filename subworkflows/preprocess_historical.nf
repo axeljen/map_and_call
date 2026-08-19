@@ -18,6 +18,7 @@ include { clumpify_single } from '../modules/bbmap/bbmap'
 include { clumpify_paired } from '../modules/bbmap/bbmap'
 include { concat_reads } from '../modules/concat_libs/concat_libs'
 include { concat_collapsed } from '../modules/concat_libs/concat_libs'
+include { cleanup_reads } from '../modules/progressive_cleanup/cleanup_reads'
 
 workflow PREPROCESS_HISTORICAL {
     take:
@@ -105,6 +106,7 @@ workflow PREPROCESS_HISTORICAL {
         // Push the concatenated libraries through clumpify
         clean_paired = clumpify_paired(dedup_pairs_in)
         clean_merged = clumpify_single(dedup_merged_in)
+
     } else {
         // If no pre-mapping deduplication, just use the concatenated libraries
         // single_lib items come from groupTuple and carry single-element lists — unwrap to plain paths
@@ -119,6 +121,29 @@ workflow PREPROCESS_HISTORICAL {
                     tuple(sample_id, library, datatype, collapsed[0])
                 })
     }
+
+    // at this point, we can delete all reads up until the final, clean reads which will be mapped, to save storage
+    if (params.progressive_cleanup) {
+        cleaning_ch = clean_paired.map { sample_id, library, datatype, _reads1, _reads2 -> tuple(sample_id, library, datatype) }
+            .join(clean_merged.map { sample_id, library, datatype, collapsed_ -> tuple(sample_id, library, datatype) }, by: [0,1,2])
+            .join(adapterremoval.out.trimmed_pairs.map { sample_id, lane_, datatype, library, reads1, reads2 -> tuple(sample_id, library, datatype, reads1, reads2) }, by: [0,1,2])
+            .join(adapterremoval.out.trimmed_collapsed.map {sample_id, lane_, datatype, library, reads -> tuple(sample_id, library, datatype, reads) }, by: [0,1,2])
+            
+        // if premapping dedup is on, we can also remove the non-deduplicated, concatenated reads
+        if (premapping_dedup) {
+            cleaning_ch = cleaning_ch
+            .join(concat_pairs.reads_concat, by: [0,1,2])
+            .join(concat_merged.collapsed_concat, by: [0,1,2])
+            }
+        // convert so that all reads are passed as a single list of paths
+        cleaning_ch = cleaning_ch
+            .map { fields -> tuple(fields[0], fields[1], fields[2], fields[3..-1].flatten()) }
+
+        cleanup_reads(cleaning_ch)
+            .deleted_files
+            .view()
+    }
+
 
     // ─────────────────────────────────────────────────────────────────────────────
     // FastQC on clean (trimmed) reads

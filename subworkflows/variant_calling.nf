@@ -16,6 +16,8 @@ include { bcftools_concat as bcftools_concat_raw } from '../modules/bcftools/bcf
 include { vcf_stats as raw_vcf_stats } from '../modules/variant_stats/vcf_stats_process'
 include { combine_stats as combine_raw_vcf_stats } from '../modules/variant_stats/combine_stats'
 include { plot_variant_stats as plot_raw_stats } from '../modules/variant_stats/plot_variant_stats'
+include { cleanup_bams } from '../modules/progressive_cleanup/cleanup_bams'
+include { cleanup_vcfs } from '../modules/progressive_cleanup/cleanup_vcfs'
 
 workflow VARIANT_CALLING {
     take:
@@ -29,6 +31,7 @@ workflow VARIANT_CALLING {
     popfile                // path: population assignment file (optional, or null)
     sample_stats           // tuple: [sample_id, autosomal_dp, ...]
     store_raw_vcf          // val: boolean flag to store raw VCF
+    bam2cram               // channel value: for keeping track of the bam2cram conversion if progressive_cleaning is activated
     
     main:
     // ─────────────────────────────────────────────────────────────────────────────
@@ -118,6 +121,22 @@ workflow VARIANT_CALLING {
         raw_vcfs = freebayes.out.vcf
     }
 
+    // once calling is done, if bam2cram is true, we can delete the original BAMs to save space if progressive cleanup is enabled
+    // if (params.store_crams && params.progressive_cleanup) {
+    //     bams_for_calling.view { bams -> "Preparing to delete original BAMs after variant calling: ${bams}" }
+    //     bams_to_cleanup = raw_vcfs
+    //         .collect()  // Wait for all VCFs
+    //         .map { tuple('variant_calling_finished', 'foo', 'bar') }  // Create a single completion signal
+    //         .combine(bam2cram.map { tuple('bams2cram_finished', 'foo', 'bar') }) // Make sure not to delete until bams2cram is finished too
+    //         .mix(bams_for_calling)
+    //         .filter { sample_id, _bam, _bai -> sample_id != 'variant_calling_finished' }  // Exclude the completion signal
+    //         .filter { sample_id, _bam, _bai -> sample_id != 'bams2cram_finished' }  // Exclude the bams2cram completion signal
+    //         .map { sample_id, bam, bai -> tuple(sample_id, 'bam', bam, bai) }  // Prepare for cleanup
+
+    //     cleanup_bams(bams_to_cleanup)
+    //          .view( { bams -> "Deleting original BAMs after variant calling: ${bams}" })
+    // }
+
     // ─────────────────────────────────────────────────────────────────────────────
     // Extract summary statistics from raw VCF files
     // ─────────────────────────────────────────────────────────────────────────────
@@ -150,9 +169,21 @@ workflow VARIANT_CALLING {
         // Concatenate raw VCF files
         bcftools_concat_raw(sorted_raw_vcfs, 'raw_variants')
         raw_vcf = bcftools_concat_raw.out.vcf
+        
     } else {
         raw_vcf = channel.empty()
     }
+    // clear out region vcfs if progressive cleanup is enabled
+        if (params.progressive_cleanup) {
+            vcfs_to_clear = raw_stats.sample_stats.map( { tuple('variant_calling_finished', 'foo', 'bar') })
+                .mix(raw_vcfs)
+                .filter { region_id, _vcf, _idx -> region_id != 'variant_calling_finished' }
+                .map { _region_id, vcf, _idx -> vcf }
+                .view { vcfs -> "Deleting intermediate region VCFs after concatenation: ${vcfs}" }
+            // cleanup_vcfs(vcfs_to_clear)
+            //     .deleted_files
+            //     .view { vcfs -> "Deleted intermediate region VCFs after concatenation: ${vcfs}" } 
+        }
 
     emit:
     raw_vcfs = raw_vcfs
