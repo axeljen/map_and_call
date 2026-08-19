@@ -20,3 +20,4 @@ testrun_on_pelle.sh
 work*
 testrun_nopremapdedup.sh
 testrun_premapdedup.sh
+.conda*
