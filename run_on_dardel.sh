@@ -10,7 +10,7 @@
 #SBATCH -e ./logs/%x-%j.error
 
 # Load nextflow and modules
-ml PDC/24.11 nextflow miniconda3
+ml PDC nextflow miniconda3
 
 # Path to input file with sample and read information, see readme for details.
 INPUT_CSV='/path/to/input.csv'
