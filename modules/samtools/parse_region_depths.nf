@@ -19,7 +19,7 @@ process parse_region_depths {
     
     """    
     # Cat all bed files together, add sort key, sort, then remove key
-    for bed in ${sortedBeds}; do
+    for bed in ${sortedBeds.join(' ')}; do
         zcat \$bed >> ${sample_id}.depths.bed
     done
 
