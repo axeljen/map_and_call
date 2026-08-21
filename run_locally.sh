@@ -17,9 +17,10 @@
 nextflow run main.nf \
     --input ../testfiles/input.csv \
     -profile standard \
-    -resume \
     --reference ../testfiles/reference/GCF_003339765.1_Mmul_10_4chroms.fa \
     --reads_dir ../testfiles/reads/supersmall \
     --scaffold_list ../testfiles/test_4chroms.txt \
     --variant_caller freebayes \
-    --outdir test/freebayes_new
+    --outdir test_standard/freebayes_new \
+    -work-dir test_standard_work \
+    --chunk_size 10
