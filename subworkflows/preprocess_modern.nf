@@ -16,6 +16,7 @@ include { multiqc_fastqc as multiqc_cleanreads} from '../modules/multiqc/multiqc
 include { fastp } from '../modules/fastp/trimming'
 include { clumpify_paired } from '../modules/bbmap/bbmap'
 include { concat_reads } from '../modules/concat_libs/concat_libs'
+include { cleanup_reads } from '../modules/progressive_cleanup/cleanup_reads'
 
 workflow PREPROCESS_MODERN {
     take:
@@ -88,6 +89,29 @@ workflow PREPROCESS_MODERN {
                     tuple(sample_id, library, datatype, reads1[0], reads2[0])
                 })
     }
+
+     // at this point, we can delete all reads up until the final, clean reads which will be mapped, to save storage
+    if (params.progressive_cleanup) {
+
+        cleaning_ch = clean_paired.map { sample_id, library, datatype, _reads1, _reads2_ -> tuple(sample_id, library, datatype) }
+            .mix(
+                concat_pairs_in.multi_lib
+                    .map { sample_id, library, datatype, _reads1, _reads2 -> tuple(sample_id, library, datatype) }
+            )
+
+        // and if premapping dedup is on, we can also remove the non-deduplicated, concatenated reads
+        if (premapping_dedup) {
+            cleaning_ch = cleaning_ch
+                .join( dedup_pairs_in, by: [0,1,2])
+        }
+        // convert so that all reads are passed as a single list of paths
+        cleaning_ch = cleaning_ch
+            .map { fields -> tuple(fields[0], fields[1], fields[2], fields[3..-1].flatten()) }
+
+        cleanup_reads(cleaning_ch)
+            .deleted_files
+            .view()
+        }
 
     // ─────────────────────────────────────────────────────────────────────────────
     // FastQC on clean (trimmed) reads

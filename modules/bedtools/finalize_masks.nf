@@ -42,6 +42,9 @@ process finalize_masks {
     gzip ${sample_id}_${region_id}.mappability_mask_total.bed
     gzip ${sample_id}_${region_id}.mappability_mask_snps.bed
 
+    # delete temporary files
+    rm ${sample_id}_${region_id}_callable.bed
+
     """
 
     stub:

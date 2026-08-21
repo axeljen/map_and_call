@@ -22,6 +22,9 @@ include { parse_region_depths } from '../modules/samtools/parse_region_depths'
 include { parse_region_depths as parse_region_depths_downsampled } from '../modules/samtools/parse_region_depths'
 include { samtools_downsample } from '../modules/samtools/samtools_downsample'
 include { callable_regions } from '../modules/bedtools/callable_regions'
+include { cleanup_bams as cleanup_unmerged_bams } from '../modules/progressive_cleanup/cleanup_bams'
+include { cleanup_bams as cleanup_nonrescaled_bams } from '../modules/progressive_cleanup/cleanup_bams'
+include { cleanup_bams as cleanup_nondedup_bams } from '../modules/progressive_cleanup/cleanup_bams'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helper function: Calculate sample depth statistics and sex assignments
@@ -114,6 +117,7 @@ workflow PROCESS_BAMS {
     max_depth              // val: maximum depth threshold (integer or fraction)
     sex_assignment_lower   // val: lower threshold for sex assignment
     sex_assignment_upper   // val: upper threshold for sex assignment
+
     
     main:
     // ─────────────────────────────────────────────────────────────────────────────
@@ -141,17 +145,45 @@ workflow PROCESS_BAMS {
             modern:     datatype == '1'
             historical: datatype == '2'
         }
+    per_sample_bams.multi.view { bams -> "Merged BAMs: ${bams}" }
+    
+    // if multilib bams have been merged, we can delete the original, unmerged bams to save space if progressive cleanup is enabled
+    if (params.progressive_cleanup) {
+        unmerged_to_clean = all_sample_bams.modern.map { sample_id, datatype, _bam, _bai -> tuple(sample_id, datatype) }
+            .mix(all_sample_bams.historical.map { sample_id, datatype, _bam, _bai -> tuple(sample_id, datatype) })
+            .combine(
+                per_sample_bams.multi
+                    .map { sample_id, datatype, bam_paths, bam_indices -> tuple(sample_id, datatype, bam_paths, bam_indices) },
+                    by: [0,1]
+            )
+            .transpose(by: [2, 3])
+
+        cleanup_unmerged_bams(unmerged_to_clean)
+            .deleted_files
+            .view( { bams -> "Deleting unmerged BAMs: ${bams}" })
+    }
 
     // ─────────────────────────────────────────────────────────────────────────────
     // Post-mapping deduplication (optional)
     // ─────────────────────────────────────────────────────────────────────────────
     if (postmapping_dedup) {
-        dedup_bams = samtools_markdups(all_sample_bams.historical.mix(all_sample_bams.modern))
+        rawbams = all_sample_bams.historical.mix(all_sample_bams.modern)
+        dedup_bams = samtools_markdups(rawbams)
         all_sample_bams = dedup_bams.bam.branch { _sample_id, datatype, _bam, _bai ->
             modern:     datatype == '1'
             historical: datatype == '2'
         }
         cram_metrics = dedup_bams.metrics
+        // delete non-deduplicated bams if progressive cleanup is enabled
+        if (params.progressive_cleanup) {
+            nondedup_to_clean = dedup_bams.bam
+                .map { sample_id, datatype, _bam, _bai -> tuple(sample_id, datatype) }
+                .combine(rawbams, by: [0,1])
+            nondedup_to_clean.view { bams -> "Preparing to delete non-deduplicated BAMs: ${bams}" }
+            cleanup_nondedup_bams(nondedup_to_clean)
+                .deleted_files
+                .view( { bams -> "Deleting non-deduplicated BAMs: ${bams}" })
+        }
     } else {
         cram_metrics = channel.empty()
     }
@@ -169,6 +201,14 @@ workflow PROCESS_BAMS {
             .map { sample_id, _datatype, bam, bai -> tuple(sample_id, bam, bai) }
             .mix(rescaled_bams.rescaled_bam)
         damage_reports = rescaled_bams.damage_reports
+        // if rescaling, we can delete the original, unrescaled bams to save space if progressive cleanup is enabled
+        if (params.progressive_cleanup) {
+            unrescaled_to_clean = rescaled_bams.map { sample_id, datatype, _bam, _bai -> tuple(sample_id, datatype) }
+                .combine(all_sample_bams.historical, by: [0,1])
+            cleanup_nonrescaled_bams(unrescaled_to_clean)
+                .deleted_files
+                .view( { bams -> "Deleting unrescaled BAMs: ${bams}" })
+        }
     } else {
         println "Damage profiling and rescaling is disabled. Skipping this step and using original BAMs for downstream analyses."
         rescaled_bams = damage_profiler(

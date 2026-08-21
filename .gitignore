@@ -22,3 +22,4 @@ testrun_nopremapdedup.sh
 testrun_premapdedup.sh
 cleaning_test
 test*
+.conda*

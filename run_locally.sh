@@ -21,6 +21,7 @@ nextflow run main.nf \
     --reads_dir ../testfiles/reads/supersmall \
     --scaffold_list ../testfiles/test_4chroms.txt \
     --variant_caller freebayes \
-    --outdir test_standard/freebayes_new \
-    -work-dir test_standard_work \
-    --chunk_size 10
+    --outdir test/freebayes_new \
+    -work-dir cleaning_test \
+    --progressive_cleaning \
+    --chunk_size 5

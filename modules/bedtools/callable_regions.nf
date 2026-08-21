@@ -10,7 +10,7 @@ process callable_regions {
     tuple val(sample_id), val(min_dp), val(max_dp), val(sex_assignment), path(bedfile), val(sex_limited_scaffolds), val(non_sex_limited_scaffolds), path(faidx)
     
     output:
-    tuple val(sample_id), path("${sample_id}.callable_regions.bed"), emit: callable
+    tuple val(sample_id), path("${sample_id}.callable_regions.bed.gz"), emit: callable
 
     script:
     def sex_limited_scaffolds_list = sex_limited_scaffolds.join(' ')
@@ -21,7 +21,7 @@ process callable_regions {
 
     """
     # make a temporary bedfile while filtering
-    cat ${bedfile} > tmp_${sample_id}_callable.bed
+    zcat ${bedfile} > tmp_${sample_id}_callable.bed
 
     # make sex-limited and non-sexlimited bedstrings based on the input lists
     for scaffold in $sex_limited_scaffolds_list; do
@@ -71,11 +71,21 @@ process callable_regions {
     # and sort the final output so that the sex-limited scaffolds show up where they should
     bedtools sort -faidx ${faidx} -i tmp.${sample_id}.merged.bed > ${sample_id}.callable_regions.bed
 
+    # remove temporary files
+    rm tmp_${sample_id}_callable.bed
+    rm tmp.${sample_id}.callable_regions.bed
+    rm tmp.${sample_id}.merged.bed
+    rm sex_limited_scaffolds.bed
+    rm reference_mask.bed
+
+    # gzip the final output to save space
+    gzip -f ${sample_id}.callable_regions.bed
+
     """
 
     stub:
     """
-    touch ${sample_id}.callable_regions.bed
+    touch ${sample_id}.callable_regions.bed.gz
     """
 
 }
