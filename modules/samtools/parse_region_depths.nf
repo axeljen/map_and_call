@@ -9,7 +9,7 @@ process parse_region_depths {
     each path(faidx)
 
     output:
-    tuple val(sample_id), path("${sample_id}.depths.bed"), emit: sample_depth_beds
+    tuple val(sample_id), path("${sample_id}.depths.bed.gz"), emit: sample_depth_beds
     tuple val(sample_id), path("${sample_id}.depths.avg.txt"), emit: sample_depth_avg
     script:
     // Sort by numeric prefix before first underscore
@@ -20,7 +20,7 @@ process parse_region_depths {
     """    
     # Cat all bed files together, add sort key, sort, then remove key
     for bed in ${sortedBeds}; do
-        cat \$bed >> ${sample_id}.depths.bed
+        zcat \$bed >> ${sample_id}.depths.bed
     done
 
    # then do the average depths per scaffold
@@ -39,6 +39,9 @@ process parse_region_depths {
         }' \
         > ${sample_id}.depths.avg.txt
     
+    # gzip the bed file to save space
+    gzip -f ${sample_id}.depths.bed
+
     """
 
     stub:

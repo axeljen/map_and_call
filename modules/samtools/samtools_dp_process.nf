@@ -8,7 +8,7 @@ process samtools_dp {
     tuple val(sample_id), path(cram), path(crai), val(region_id), val(regions)
 
     output:
-    tuple val(sample_id), path("${region_id}_${sample_id}.depths.bed"), emit: region_dp
+    tuple val(sample_id), path("${region_id}_${sample_id}.depths.bed.gz"), emit: region_dp
 
     script:
     def region_list = regions.join(' ')
@@ -23,7 +23,10 @@ process samtools_dp {
                 bedtools groupby -i - -g 1,4 -c 2,3 -o min,max | \
                 awk -v OFS='\t' ' { print \$1 OFS \$3 OFS \$4 OFS \$2} ' >> ${region_id}_${sample_id}.depths.bed
     done
-    
+
+    # zip it to save space
+    gzip -f ${region_id}_${sample_id}.depths.bed
+
     """
 
     stub:

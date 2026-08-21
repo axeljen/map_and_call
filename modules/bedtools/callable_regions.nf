@@ -10,7 +10,7 @@ process callable_regions {
     tuple val(sample_id), val(min_dp), val(max_dp), val(sex_assignment), path(bedfile), val(sex_limited_scaffolds), val(non_sex_limited_scaffolds), path(faidx)
     
     output:
-    tuple val(sample_id), path("${sample_id}.callable_regions.bed"), emit: callable
+    tuple val(sample_id), path("${sample_id}.callable_regions.bed.gz"), emit: callable
 
     script:
     def sex_limited_scaffolds_list = sex_limited_scaffolds.join(' ')
@@ -62,20 +62,30 @@ process callable_regions {
         touch reference_mask.bed
         reference_mask="reference_mask.bed"
     fi
-    bedtools subtract -a tmp_${sample_id}_callable.bed -b \${reference_mask} > tmp.${sample_id}.callable_regions.bed
+    bedtools subtract -a tmp_${sample_id}_callable.bed -b \${reference_mask} > tmp.${sample_id}.callable_regions.bed.gz
 
     # Sort and merge overlapping/adjacent regions
     # First merge per-scaffold using GNU sort (disk-based) to avoid OOM with large files,
     # then re-sort by faidx scaffold order on the much smaller merged output
-    bedtools merge -i tmp.${sample_id}.callable_regions.bed > tmp.${sample_id}.merged.bed
+    bedtools merge -i tmp.${sample_id}.callable_regions.bed.gz > tmp.${sample_id}.merged.bed.gz
     # and sort the final output so that the sex-limited scaffolds show up where they should
     bedtools sort -faidx ${faidx} -i tmp.${sample_id}.merged.bed > ${sample_id}.callable_regions.bed
+
+    # remove temporary files
+    rm tmp_${sample_id}_callable.bed
+    rm tmp.${sample_id}.callable_regions.bed
+    rm tmp.${sample_id}.merged.bed
+    rm sex_limited_scaffolds.bed
+    rm reference_mask.bed
+
+    # gzip the final output to save space
+    gzip -f ${sample_id}.callable_regions.bed
 
     """
 
     stub:
     """
-    touch ${sample_id}.callable_regions.bed
+    touch ${sample_id}.callable_regions.bed.gz
     """
 
 }
