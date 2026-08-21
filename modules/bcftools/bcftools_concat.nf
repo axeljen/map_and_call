@@ -17,7 +17,12 @@ process bcftools_concat {
     script:
     """
     bcftools concat -Oz -o ${category}.vcf.gz ${vcf_files.join(' ')}
-    bcftools index ${category}.vcf.gz
+    # before indexing check that vcf actually has records, otherwise bcftools index will fail
+    if [ \$(bcftools view -H ${category}.vcf.gz | wc -l) -gt 0 ]; then
+        bcftools index ${category}.vcf.gz
+    else
+        echo "Warning: vcf file ${category}.vcf.gz is empty."
+    fi
     """
 
     stub:
