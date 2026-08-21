@@ -21,3 +21,5 @@ work*
 testrun_nopremapdedup.sh
 testrun_premapdedup.sh
 .conda*
+work*
+cleaning_test
