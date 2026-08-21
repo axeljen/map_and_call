@@ -23,5 +23,7 @@ nextflow run main.nf \
     --scaffold_list ../testfiles/test_4chroms.txt \
     --variant_caller freebayes \
     --outdir test/freebayes_new \
-    --work-dir cleaning_test \
-    --progressive_cleaning
+    --chunk_size 5 \
+    -work-dir cleaning_test \
+    --progressive_cleaning \
+    --chunk_size 5
