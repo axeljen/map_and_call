@@ -21,7 +21,7 @@ process callable_regions {
 
     """
     # make a temporary bedfile while filtering
-    cat ${bedfile} > tmp_${sample_id}_callable.bed
+    zcat ${bedfile} > tmp_${sample_id}_callable.bed
 
     # make sex-limited and non-sexlimited bedstrings based on the input lists
     for scaffold in $sex_limited_scaffolds_list; do
@@ -62,12 +62,12 @@ process callable_regions {
         touch reference_mask.bed
         reference_mask="reference_mask.bed"
     fi
-    bedtools subtract -a tmp_${sample_id}_callable.bed -b \${reference_mask} > tmp.${sample_id}.callable_regions.bed.gz
+    bedtools subtract -a tmp_${sample_id}_callable.bed -b \${reference_mask} > tmp.${sample_id}.callable_regions.bed
 
     # Sort and merge overlapping/adjacent regions
     # First merge per-scaffold using GNU sort (disk-based) to avoid OOM with large files,
     # then re-sort by faidx scaffold order on the much smaller merged output
-    bedtools merge -i tmp.${sample_id}.callable_regions.bed.gz > tmp.${sample_id}.merged.bed.gz
+    bedtools merge -i tmp.${sample_id}.callable_regions.bed > tmp.${sample_id}.merged.bed
     # and sort the final output so that the sex-limited scaffolds show up where they should
     bedtools sort -faidx ${faidx} -i tmp.${sample_id}.merged.bed > ${sample_id}.callable_regions.bed
 

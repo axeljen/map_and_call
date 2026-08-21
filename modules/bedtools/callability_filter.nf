@@ -24,15 +24,15 @@ process callability_filter {
         endpos=\$(echo \$region | cut -d: -f2 | cut -d- -f2)
         echo -e "\${chrom}\t\${startpos}\t\${endpos}" >> tmp.${sample}.${region_id}.bed
     done
-    bedtools intersect -a ${callable_regions} -b tmp.${sample}.${region_id}.bed | gzip > tmp.${sample}.${region_id}.callable.bed.gz
+    bedtools intersect -a ${callable_regions} -b tmp.${sample}.${region_id}.bed > tmp.${sample}.${region_id}.callable.bed
 
     # empty bed files will break bcftools view, so we need to add a dummy region if there are no callable regions for this sample/region
-    if [ ! -s tmp.${sample}.${region_id}.callable.bed.gz ]; then
-        echo -e "\${chrom}\t0\t0" | gzip > tmp.${sample}.${region_id}.callable.bed.gz
+    if [ ! -s tmp.${sample}.${region_id}.callable.bed ]; then
+        echo -e "\${chrom}\t0\t0" > tmp.${sample}.${region_id}.callable.bed
     fi
 
     # keep only genotypes that are within the callable regions
-    bcftools view -R tmp.${sample}.${region_id}.callable.bed.gz -Oz -o ${sample}_${region_id}.dp.filtered.vcf.gz ${sample}_${region_id}.vcf.gz
+    bcftools view -R tmp.${sample}.${region_id}.callable.bed -Oz -o ${sample}_${region_id}.dp.filtered.vcf.gz ${sample}_${region_id}.vcf.gz
     bcftools index ${sample}_${region_id}.dp.filtered.vcf.gz
     
     """
