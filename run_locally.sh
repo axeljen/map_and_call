@@ -22,4 +22,6 @@ nextflow run main.nf \
     --reads_dir ../testfiles/reads/supersmall \
     --scaffold_list ../testfiles/test_4chroms.txt \
     --variant_caller freebayes \
-    --outdir test/freebayes_new
+    --outdir test/freebayes_new \
+    --work-dir cleaning_test \
+    --progressive_cleaning
