@@ -262,15 +262,19 @@ ab_data <- read_tsv("%s", show_col_types = FALSE)
 ## Allele Balance by Sample
 
 ```{r ab-by-sample, fig.height=max(6, length(unique(ab_data$sample)) * 0.5)}
-ab_data %%>%%
-  ggplot(aes(x = minor_allele_support, y = sample)) +
-  geom_violin(fill = "#984ea3", alpha = 0.6) +
-  geom_vline(xintercept = 0.5, linetype = "dashed", color = "red") +
-  labs(
-    title = "Allele Balance Distribution by Sample",
-    x = "Minor Allele Support",
-    y = NULL
-  )
+if (nrow(ab_data) > 0 && "minor_allele_support" %%in%% names(ab_data)) {
+  ab_data %%>%%
+    ggplot(aes(x = minor_allele_support, y = sample)) +
+    geom_violin(fill = "#984ea3", alpha = 0.6) +
+    geom_vline(xintercept = 0.5, linetype = "dashed", color = "red") +
+    labs(
+      title = "Allele Balance Distribution by Sample",
+      x = "Minor Allele Support",
+      y = NULL
+    )
+} else {
+  cat("*Note: No allele balance data available.*\\n")
+}
 ```
 
 ', ab_file[1]))
@@ -288,31 +292,39 @@ qual_data <- read_tsv("%s", show_col_types = FALSE)
 ## Quality Distribution
 
 ```{r qual-hist}
-ggplot(qual_data, aes(x = qual)) +
-  geom_histogram(bins = 50, fill = "#377eb8", color = "white") +
-  scale_x_log10(labels = comma) +
-  scale_y_continuous(labels = comma) +
-  labs(
-    title = "Distribution of Variant Quality Scores",
-    x = "Quality (QUAL, log10 scale)",
-    y = "Number of Variants"
-  )
+if (nrow(qual_data) > 0 && "qual" %%in%% names(qual_data)) {
+  ggplot(qual_data, aes(x = qual)) +
+    geom_histogram(bins = 50, fill = "#377eb8", color = "white") +
+    scale_x_log10(labels = comma) +
+    scale_y_continuous(labels = comma) +
+    labs(
+      title = "Distribution of Variant Quality Scores",
+      x = "Quality (QUAL, log10 scale)",
+      y = "Number of Variants"
+    )
+} else {
+  cat("*Note: No quality data available.*\\n")
+}
 ```
 
 ## Minor Allele Frequency Distribution
 
 ```{r maf-hist}
-qual_data %%>%%
-  filter(maf > 0) %%>%%
-  ggplot(aes(x = maf)) +
-  geom_histogram(bins = 50, fill = "#4daf4a", color = "white") +
-  scale_y_continuous(labels = comma) +
-  labs(
-    title = "Minor Allele Frequency (MAF) Distribution",
-    subtitle = "Sites with MAF > 0",
-    x = "Minor Allele Frequency",
-    y = "Number of Variants"
-  )
+if (nrow(qual_data) > 0 && "maf" %%in%% names(qual_data) && any(qual_data$maf > 0, na.rm = TRUE)) {
+  qual_data %%>%%
+    filter(maf > 0) %%>%%
+    ggplot(aes(x = maf)) +
+    geom_histogram(bins = 50, fill = "#4daf4a", color = "white") +
+    scale_y_continuous(labels = comma) +
+    labs(
+      title = "Minor Allele Frequency (MAF) Distribution",
+      subtitle = "Sites with MAF > 0",
+      x = "Minor Allele Frequency",
+      y = "Number of Variants"
+    )
+} else {
+  cat("*Note: No MAF data available or all MAF values are zero.*\\n")
+}
 ```
 
 ', qual_file[1]))
@@ -335,7 +347,7 @@ dp_data <- read_tsv("%s", show_col_types = FALSE, n_max = 1000000)
 
 ```{r dp-site-level-hist}
 # Site-level depth from qual_fmiss_maf_dp file (if dp column exists)
-if ("dp" %%in%% names(qual_data)) {
+if ("dp" %%in%% names(qual_data) && nrow(qual_data) > 0 && any(!is.na(qual_data$dp))) {
   dp_99_site <- quantile(qual_data$dp, 0.99, na.rm = TRUE)
   
   qual_data %%>%%
@@ -357,48 +369,56 @@ if ("dp" %%in%% names(qual_data)) {
       y = "Number of Variant Sites"
     )
 } else {
-  cat("*Note: Site-level depth data not available in this dataset.*\\n")
+  cat("*Note: Site-level depth data not available or empty in this dataset.*\\n")
 }
 ```
 
 ## Depth Summary Statistics
 
 ```{r dp-summary-table}
-dp_summary <- dp_data %%>%%
-  group_by(sample) %%>%%
-  summarise(
-    Mean = mean(genotype_depth, na.rm = TRUE),
-    Median = median(genotype_depth, na.rm = TRUE),
-    SD = sd(genotype_depth, na.rm = TRUE),
-    Min = min(genotype_depth, na.rm = TRUE),
-    Q25 = quantile(genotype_depth, 0.25, na.rm = TRUE),
-    Q75 = quantile(genotype_depth, 0.75, na.rm = TRUE),
-    Max = max(genotype_depth, na.rm = TRUE),
-    N_Genotypes = n()
-  ) %%>%%
-  arrange(desc(Median))
+if (nrow(dp_data) > 0 && "genotype_depth" %%in%% names(dp_data)) {
+  dp_summary <- dp_data %%>%%
+    group_by(sample) %%>%%
+    summarise(
+      Mean = mean(genotype_depth, na.rm = TRUE),
+      Median = median(genotype_depth, na.rm = TRUE),
+      SD = sd(genotype_depth, na.rm = TRUE),
+      Min = min(genotype_depth, na.rm = TRUE),
+      Q25 = quantile(genotype_depth, 0.25, na.rm = TRUE),
+      Q75 = quantile(genotype_depth, 0.75, na.rm = TRUE),
+      Max = max(genotype_depth, na.rm = TRUE),
+      N_Genotypes = n()
+    ) %%>%%
+    arrange(desc(Median))
 
-kable(
-  dp_summary,
-  digits = 2,
-  format.args = list(big.mark = ","),
-  caption = "Summary Statistics of Genotype Depth by Sample"
-)
+  kable(
+    dp_summary,
+    digits = 2,
+    format.args = list(big.mark = ","),
+    caption = "Summary Statistics of Genotype Depth by Sample"
+  )
+} else {
+  cat("*Note: No depth data available.*\\n")
+}
 ```
 
 ## Depth Distribution by Sample
 
 ```{r dp-by-sample, fig.height=max(6, length(unique(dp_data$sample)) * 0.5)}
-dp_data %%>%%
-  filter(genotype_depth <= quantile(genotype_depth, 0.99, na.rm = TRUE)) %%>%%
-  ggplot(aes(x = genotype_depth, y = sample)) +
-  geom_violin(fill = "#ff7f00", alpha = 0.6) +
-  labs(
-    title = "Genotype Depth Distribution by Sample",
-    subtitle = "Truncated at 99th percentile",
-    x = "Genotype Depth (FORMAT/DP)",
-    y = NULL
-  )
+if (nrow(dp_data) > 0 && "genotype_depth" %%in%% names(dp_data)) {
+  dp_data %%>%%
+    filter(genotype_depth <= quantile(genotype_depth, 0.99, na.rm = TRUE)) %%>%%
+    ggplot(aes(x = genotype_depth, y = sample)) +
+    geom_violin(fill = "#ff7f00", alpha = 0.6) +
+    labs(
+      title = "Genotype Depth Distribution by Sample",
+      subtitle = "Truncated at 99th percentile",
+      x = "Genotype Depth (FORMAT/DP)",
+      y = NULL
+    )
+} else {
+  cat("*Note: No depth data available.*\\n")
+}
 ```
 
 ', dp_file[1]))
