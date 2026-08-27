@@ -17,11 +17,10 @@
 nextflow run main.nf \
     --input ../mapping_testfiles/sample_sheet_tutorial.csv \
     -profile standard \
-    -resume \
     --reference ../mapping_testfiles/data/reference/reference_genome.fa.gz \
     --reads_dir ../mapping_testfiles/data/reads/ \
     --scaffold_list ../mapping_testfiles/data/reference/scaffold_list.txt \
     --variant_caller freebayes \
-    --outdir test/freebayes_new_cleanup \
-    -work-dir work_cleanuprun \
-    --progressive_cleanup
+    --outdir test/freebayes_new_sing \
+    -work-dir with_singularity \
+    --with_singularity 
