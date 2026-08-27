@@ -15,13 +15,13 @@
 # only used for testing!
 
 nextflow run main.nf \
-    --input ../testfiles/input.csv \
+    --input ../mapping_testfiles/sample_sheet_tutorial.csv \
     -profile standard \
-    --reference ../testfiles/reference/GCF_003339765.1_Mmul_10_4chroms.fa \
-    --reads_dir ../testfiles/reads/supersmall \
-    --scaffold_list ../testfiles/test_4chroms.txt \
+    -resume \
+    --reference ../mapping_testfiles/data/reference/reference_genome.fa.gz \
+    --reads_dir ../mapping_testfiles/data/reads/ \
+    --scaffold_list ../mapping_testfiles/data/reference/scaffold_list.txt \
     --variant_caller freebayes \
-    --outdir test/freebayes_new \
-    -work-dir cleaning_test \
-    --progressive_cleaning \
-    --chunk_size 5
+    --outdir test/freebayes_new_cleanup \
+    -work-dir work_cleanuprun \
+    --progressive_cleanup
