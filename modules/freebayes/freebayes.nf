@@ -30,16 +30,18 @@ process freebayes{
         echo -e "\${chrom}\t\${start}\t\${end}" >> freebayes_targets.bed
     done
 
-    # freebayes doesn't like zipped fasta files, so if it's a gzipped reference, extract and index
+    # freebayes doesn't like zipped fasta files, so if it's a gzipped reference, extract
     if [[ ${reference} == *.gz ]]; then
         echo "Reference genome is gzipped, extracting..."
         gunzip -c ${reference} > ${reference.baseName}
-        reference=${reference.baseName}
-        samtools faidx ${reference}; else 
-        reference=${reference}
+        reference_file=${reference.baseName}
+        # Link the existing .fai file 
+        ln -s ${reference_indices[0]} \${reference_file}.fai
+    else 
+        reference_file=${reference}
     fi
 
-    freebayes -f \${reference} -t freebayes_targets.bed --populations freebayes_popfile.txt --min-mapping-quality ${params.min_mapqual} --min-base-quality ${params.min_basequal} --ploidy ${params.ploidy} ${bamlist} | bgzip - > freebayes.region-${region_id}.vcf.gz
+    freebayes -f \${reference_file} -t freebayes_targets.bed --populations freebayes_popfile.txt --min-mapping-quality ${params.min_mapqual} --min-base-quality ${params.min_basequal} --ploidy ${params.ploidy} ${bamlist} | bgzip - > freebayes.region-${region_id}.vcf.gz
     bcftools index freebayes.region-${region_id}.vcf.gz
     """
 
