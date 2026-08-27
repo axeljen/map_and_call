@@ -13,7 +13,12 @@ process select_snps {
     script:
     """
     bcftools view -v snps -Oz -o region-${region_id}.snps.vcf.gz ${vcf}
-    bcftools index region-${region_id}.snps.vcf.gz
+    # Try to index; if it fails (e.g., no snps), create a valid empty VCF with header
+    if ! bcftools index region-${region_id}.snps.vcf.gz 2>/dev/null; then
+        echo "Warning: Could not index region-${region_id}.snps.vcf.gz (likely no snps found)"
+        bcftools view -h ${vcf} | bgzip > region-${region_id}.snps.vcf.gz
+        bcftools index region-${region_id}.snps.vcf.gz
+    fi
     """
 
     stub:

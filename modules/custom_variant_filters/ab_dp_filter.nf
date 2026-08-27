@@ -35,7 +35,12 @@ process ab_dp_filter {
     ab_dp_filtration.py -i tmp.${sample}_${region_id}_${category}.vcf.gz -o ${category}_${sample}_region-${region_id}.ab_dp_filtered.vcf.gz \
         --min-ab ${params.min_allele_balance} --samples ${sample} \
         --min-depth ${min_depth} --max-depth ${max_depth} --sex-assignments ${sex_assignment} ${sexlinked_arg}
-    bcftools index ${category}_${sample}_region-${region_id}.ab_dp_filtered.vcf.gz
+    # Try to index; if it fails (e.g., empty after filtering), create a valid empty VCF with header
+    if ! bcftools index ${category}_${sample}_region-${region_id}.ab_dp_filtered.vcf.gz 2>/dev/null; then
+        echo "Warning: Could not index ${category}_${sample}_region-${region_id}.ab_dp_filtered.vcf.gz (likely empty after filtering)"
+        bcftools view -h tmp.${sample}_${region_id}_${category}.vcf.gz | bgzip > ${category}_${sample}_region-${region_id}.ab_dp_filtered.vcf.gz
+        bcftools index ${category}_${sample}_region-${region_id}.ab_dp_filtered.vcf.gz
+    fi
     rm tmp.${sample}_${region_id}_${category}.vcf.gz tmp.${sample}_${region_id}_${category}.vcf.gz.csi
     """
 

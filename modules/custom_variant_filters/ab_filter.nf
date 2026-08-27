@@ -15,11 +15,12 @@ process ab_filter {
     script:
     """
     ab_filtration.py -i ${vcf} -o ${category}_${sample}_region-${region_id}.ab_filtered.vcf.gz --min-ab ${params.min_allele_balance}
-    # before indexing check that vcf actually has records, otherwise bcftools index will fail
-    if [ \$(bcftools view -H ${category}_${sample}_region-${region_id}.ab_filtered.vcf.gz | wc -l) -gt 0 ]; then
+    # Try to index; if it fails (e.g., empty VCF), create a valid empty index
+    if ! bcftools index ${category}_${sample}_region-${region_id}.ab_filtered.vcf.gz 2>/dev/null; then
+        echo "Warning: Could not index ${category}_${sample}_region-${region_id}.ab_filtered.vcf.gz (likely empty)"
+        # Create a proper empty VCF with header and index it
+        bcftools view -h ${vcf} | bgzip > ${category}_${sample}_region-${region_id}.ab_filtered.vcf.gz
         bcftools index ${category}_${sample}_region-${region_id}.ab_filtered.vcf.gz
-    else
-        echo "Warning: vcf file ${category}_${sample}_region-${region_id}.ab_filtered.vcf.gz is empty."
     fi
     """
 

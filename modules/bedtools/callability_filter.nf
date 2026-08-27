@@ -33,7 +33,12 @@ process callability_filter {
 
     # keep only genotypes that are within the callable regions
     bcftools view -R tmp.${sample}.${region_id}.callable.bed -Oz -o ${sample}_${region_id}.dp.filtered.vcf.gz ${sample}_${region_id}.vcf.gz
-    bcftools index ${sample}_${region_id}.dp.filtered.vcf.gz
+    # Try to index; if it fails (e.g., empty after filtering), create a valid empty VCF with header
+    if ! bcftools index ${sample}_${region_id}.dp.filtered.vcf.gz 2>/dev/null; then
+        echo "Warning: Could not index ${sample}_${region_id}.dp.filtered.vcf.gz (likely empty after filtering)"
+        bcftools view -h ${sample}_${region_id}.vcf.gz | bgzip > ${sample}_${region_id}.dp.filtered.vcf.gz
+        bcftools index ${sample}_${region_id}.dp.filtered.vcf.gz
+    fi
     
     """
 

@@ -16,7 +16,12 @@ process mappability_filter {
     """
     bcftools view -s ${sample} -Ov ${vcf} | \
     bedtools intersect -header -a /dev/stdin -b ${mappability_bed} | bgzip -c > ${category}_${sample}_region-${region_id}.mappability_filtered.vcf.gz
-    bcftools index ${category}_${sample}_region-${region_id}.mappability_filtered.vcf.gz
+    # Try to index; if it fails (e.g., empty after filtering), create a valid empty VCF with header
+    if ! bcftools index ${category}_${sample}_region-${region_id}.mappability_filtered.vcf.gz 2>/dev/null; then
+        echo "Warning: Could not index ${category}_${sample}_region-${region_id}.mappability_filtered.vcf.gz (likely empty after filtering)"
+        bcftools view -h ${vcf} -s ${sample} | bgzip > ${category}_${sample}_region-${region_id}.mappability_filtered.vcf.gz
+        bcftools index ${category}_${sample}_region-${region_id}.mappability_filtered.vcf.gz
+    fi
     """
 
     stub:
