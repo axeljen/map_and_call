@@ -19,12 +19,13 @@ include { multiqc_fastqc } from './modules/multiqc/multiqc_fastqc'
 
 /*
  * Parse input metadata CSV
- * Expected format: sample_id;data_type;library;read_1;read_2
+ * Expected format: sample_id;data_type;library;read_1;read_2 (semicolon, comma, tab, or whitespace separated)
  */
 def parse_input(metadata_file) {
+    def sheet = WorkflowUtils.prepareSampleSheet(metadata_file)
     return channel
-        .fromPath(metadata_file)
-        .splitCsv(header: true, sep: ';')
+        .fromPath(sheet.path)
+        .splitCsv(header: true, sep: sheet.sep)
         .filter { row -> !row.sample_id.startsWith('#') }
         .map { row ->
             def data_type = row.data_type

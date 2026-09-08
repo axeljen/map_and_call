@@ -5,7 +5,32 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 class WorkflowUtils {
-    
+
+    /*
+     * Prepare a sample sheet for parsing: detect its delimiter (semicolon, comma, tab,
+     * or arbitrary whitespace) and, for whitespace-separated sheets, normalize runs of
+     * whitespace into single tabs since splitCsv only accepts a literal single-char separator.
+     * Returns a map with the path to use and the separator to pass to splitCsv.
+     */
+    static def prepareSampleSheet(metadata_file) {
+        def source = new File(metadata_file.toString())
+        def header = source.withReader { it.readLine() }
+        def candidates = [';', ',', '\t']
+        def sep = candidates.max { header.count(it) }
+        if (header.count(sep) > 0) {
+            return [path: source.absolutePath, sep: sep]
+        }
+        if (!(header ==~ /.*\s+.*/)) {
+            throw new Exception("Could not detect a delimiter (expected ';', ',', tab, or whitespace) in sample sheet header: ${header}")
+        }
+        def normalized = File.createTempFile('sample_sheet_', '.tsv')
+        normalized.deleteOnExit()
+        normalized.withWriter { writer ->
+            source.eachLine { line -> writer.writeLine(line.trim().replaceAll(/\s+/, '\t')) }
+        }
+        return [path: normalized.absolutePath, sep: '\t']
+    }
+
     /*
      * Setup sex chromosome system and identify sex-linked contigs
      * Returns map with: sex_chrom_system, sex_linked_list, sex_limited_list, non_sex_limited_list
