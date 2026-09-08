@@ -23,3 +23,5 @@ testrun_premapdedup.sh
 cleaning_test
 test*
 .conda*
+.singularity/*
+conf
