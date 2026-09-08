@@ -33,9 +33,10 @@ $ cd map_and_call
 
 The sample sheet contains one row per sequencing read pair to include, and must have five columns with headers: `sample_id`, `library`, `data_type`, `read_1`, and `read_2`. Recommended format is tab-separated, but any whitespace, semicolon, or comma should also work will also be detected automatically. 
 
-  sample_id  library  data_type  read_1  read_2
-  sample_1  lib1  1  sample_1_R1.fq.gz  sample_1_R2.fq.gz
-  sample_2  lib1  2  sample_2_R1.fq.gz  sample_2_R2.fq.gz
+| sample_id | library | data_type | read_1              | read_2              |
+|-----------|---------|-----------|----------------------|----------------------|
+| sample_1  | lib1    | 1         | sample_1_R1.fq.gz    | sample_1_R2.fq.gz    |
+| sample_2  | lib1    | 2         | sample_2_R1.fq.gz    | sample_2_R2.fq.gz    |
 
 Where:
 
