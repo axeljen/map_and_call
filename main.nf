@@ -29,12 +29,13 @@ include { combine_summary_tables } from './modules/summary_stats/combine_summary
 
 /*
  * Parse input metadata CSV
- * Expected format: sample_id;taxon;read_1;read_2
+ * Expected format: sample_id;taxon;read_1;read_2 (semicolon, comma, tab, or whitespace separated)
  */
 def parse_input(metadata_file) {
+    def sheet = WorkflowUtils.prepareSampleSheet(metadata_file)
     return channel
-        .fromPath(metadata_file)
-        .splitCsv(header: true, sep: ';')
+        .fromPath(sheet.path)
+        .splitCsv(header: true, sep: sheet.sep)
         .filter { row -> !row.sample_id.startsWith('#') }
         .map { row ->
             def data_type = row.data_type
