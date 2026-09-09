@@ -8,6 +8,7 @@ dependencies:
   - pysam=0.23.3
   - numpy=2.4.4
   - pandas=3.0.2
+  - pytest
   - r-base >=4.0
   - r-tidyverse
   - r-knitr
