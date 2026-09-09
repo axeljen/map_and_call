@@ -22,6 +22,11 @@ testrun_nopremapdedup.sh
 testrun_premapdedup.sh
 cleaning_test
 test*
+!bin/tests/
+!bin/tests/**
+__pycache__/
+.pytest_cache/
 .conda*
 .singularity/*
 conf
+example_data*
