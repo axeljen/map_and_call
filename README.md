@@ -139,5 +139,17 @@ Contains three bedfiles per sample:
   contains genomic regions where we're confident in our ability to call SNPs if
   present. Any sites with indels will be excluded in this file.
 
+## Working example
 
+I have prepared a fully working example including a toy dataset. This can be useful to test the pipeline in your environment, to ensure that everything works as expected. 
 
+To follow the working example, download the dataset:
+
+```bash
+  # download and unarchive the example data
+  curl -L https://osf.io/download/d8gqw/ -o example_data.tar
+  tar -xf example_data.tar
+  rm example_data.tar
+```
+
+Now `example_data` contains everything you need for a complete run from reads to variants, which should take ~10-20 minutes. See the included readme file for instructions.
