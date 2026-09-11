@@ -146,7 +146,6 @@ workflow PROCESS_BAMS {
             modern:     datatype == '1'
             historical: datatype == '2'
         }
-    per_sample_bams.multi.view { bams -> "Merged BAMs: ${bams}" }
     
     // if multilib bams have been merged, we can delete the original, unmerged bams to save space if progressive cleanup is enabled
     if (params.progressive_cleanup) {
@@ -160,8 +159,6 @@ workflow PROCESS_BAMS {
             .transpose(by: [2, 3])
 
         cleanup_unmerged_bams(unmerged_to_clean)
-            .deleted_files
-            .view( { bams -> "Deleting unmerged BAMs: ${bams}" })
     }
 
     // ─────────────────────────────────────────────────────────────────────────────
@@ -180,10 +177,7 @@ workflow PROCESS_BAMS {
             nondedup_to_clean = dedup_bams.bam
                 .map { sample_id, datatype, _bam, _bai -> tuple(sample_id, datatype) }
                 .combine(rawbams, by: [0,1])
-            nondedup_to_clean.view { bams -> "Preparing to delete non-deduplicated BAMs: ${bams}" }
             cleanup_nondedup_bams(nondedup_to_clean)
-                .deleted_files
-                .view( { bams -> "Deleting non-deduplicated BAMs: ${bams}" })
         }
     } else {
         cram_metrics = channel.empty()
@@ -207,8 +201,6 @@ workflow PROCESS_BAMS {
             unrescaled_to_clean = rescaled_bams.map { sample_id, datatype, _bam, _bai -> tuple(sample_id, datatype) }
                 .combine(all_sample_bams.historical, by: [0,1])
             cleanup_nonrescaled_bams(unrescaled_to_clean)
-                .deleted_files
-                .view( { bams -> "Deleting unrescaled BAMs: ${bams}" })
         }
     } else {
         println "Damage profiling and rescaling is disabled. Skipping this step and using original BAMs for downstream analyses."
@@ -243,18 +235,7 @@ workflow PROCESS_BAMS {
     final_bam_ch.map {
         sample, bam, bai -> tuple([sample, bam, bai])
     }
-        .collect().view {
-        bams -> println "Final BAMs for calling: ${bams}"
-    }
 
-    // refintervals_ch.view {
-    //     bams -> println "DP input channel: ${bams}"
-    // }
-
-    // dp_combined = refintervals_ch.combine(final_bam_ch)
-    // dp_combined.view {
-    //     combined -> println "DP combined channel: ${combined}"
-    // }
     dp_input_ch = final_bam_ch
         .combine(refintervals_ch)
         .map { sample_id, cram, crai, region_id, regions ->
@@ -304,8 +285,6 @@ workflow PROCESS_BAMS {
         sex_assignment_lower,
         sex_assignment_upper
     )
-
-    sample_depths.view()
 
     // ─────────────────────────────────────────────────────────────────────────────
     // Downsample BAMs (optional)
