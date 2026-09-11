@@ -43,16 +43,23 @@ workflow INDEX_REFERENCE {
     w_scaffolds            // list: W chromosome scaffold names
     
     main:
+
+    // get mode from params
+    mode = params.mode ? params.mode : 'map_and_call'
+
     // ─────────────────────────────────────────────────────────────────────────────
     // Check if BWA index files already exist and branch accordingly
     // ─────────────────────────────────────────────────────────────────────────────
-    
+
     // Duplicate the reference channel using multiMap
     ch_ref_split = ch_reference
         .multiMap { ref ->
             for_bwa: ref
             for_samtools: ref
         }
+
+    // only index reference if we're actually doing any mapping
+    if (mode == 'map_and_call') {
     
     // Branch references based on whether BWA index exists
     ref_branches = ch_ref_split.for_bwa
@@ -87,7 +94,12 @@ workflow INDEX_REFERENCE {
     
     // Combine both channels - one or the other will be empty
     bwa_index_ch = already_indexed.mix(newly_indexed.reference)
-    
+    }   else {
+        // BWA is not needed for existing-BAM mode, but downstream variant
+        // callers still require a reference bundle channel to synchronize on.
+        bwa_index_ch = ch_ref_split.for_bwa
+            .map { ref -> tuple(ref, []) }
+    }
     // Index with samtools
     faidx_and_chunks_ch = samtools_index(ch_ref_split.for_samtools)
     

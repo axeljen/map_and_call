@@ -24,4 +24,4 @@ nextflow run main.nf \
     --variant_caller freebayes \
     --outdir test/freebayes_new_cleanup \
     -work-dir work_cleanuprun \
-    --progressive_cleanup
+    --chunk_size 5

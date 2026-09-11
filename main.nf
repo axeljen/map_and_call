@@ -14,12 +14,23 @@ include { MAP_HISTORICAL } from './subworkflows/map_historical'
 include { PROCESS_BAMS } from './subworkflows/process_bams'
 include { VARIANT_CALLING } from './subworkflows/variant_calling'
 include { VARIANT_FILTERS } from './subworkflows/variant_filters'
+include { extract_sample_from_bam } from './modules/samtools/extract_sample_from_bam'
+include { samtools_dp } from './modules/samtools/samtools_dp_process'
+include { parse_region_depths } from './modules/samtools/parse_region_depths'
+include { samtools_downsample } from './modules/samtools/samtools_downsample'
+include { callable_regions } from './modules/bedtools/callable_regions'
+include { fastqc } from './modules/fastqc/fastqc_process'
+include { multiqc_fastqc } from './modules/multiqc/multiqc_fastqc'
+include { bcftools_index_vcf } from './modules/bcftools/bcftools_index_vcf'
+include { bcftools_view_region } from './modules/bcftools/bcftools_view_region'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Summary Statistics Modules (used in main workflow)
 // ─────────────────────────────────────────────────────────────────────────────
 include { parse_summary_stats } from './modules/summary_stats/parse_summary_stats'
 include { combine_summary_tables } from './modules/summary_stats/combine_summary_files'
+
+params.mode = params.mode ?: 'map_and_call'
 
 // ═══════════════════════════════════════════════════════════════════════════════
 //                      UTILITY FUNCTIONS & HELPERS
@@ -62,6 +73,28 @@ def parse_input(metadata_file) {
                     [sample_id, "${idx + 1}", data_type[idx], library[idx], reads_1[idx], reads_2[idx]]
                 }
             }
+        }
+}
+
+def parse_bamfile_list(bamfile_list) {
+    channel
+        .fromPath(bamfile_list, checkIfExists: true)
+        .splitText()
+        .map { it.trim() }
+        .filter { it && !it.startsWith('#') }
+        .map { bam_path ->
+            def bam = file(bam_path, checkIfExists: true)
+            def index_candidates = [
+                file("${bam_path}.bai"),
+                file("${bam_path}.crai"),
+                file(bam_path.replaceAll(/\.bam$/, '.bai')),
+                file(bam_path.replaceAll(/\.cram$/, '.crai'))
+            ].unique()
+            def index = index_candidates.find { it.exists() }
+            if (!index) {
+                error "Index not found for ${bam_path}"
+            }
+            tuple(bam, index)
         }
 }
 
@@ -246,13 +279,38 @@ workflow {
     sex_limited_contigs = channel.value(sex_limited_list)
     non_sex_limited_contigs = channel.value(non_sex_limited_list)
 
-    // Input channel from metadata file
-    ch_input = parse_input(params.input)
-        .branch {
-            sample_id, lane, data_type, library, r1, r2 ->
-            modern: data_type == '1'
-            historical: data_type == '2'
-        }
+    // Validate mode parameter
+    if (!(params.mode in ['map_and_call', 'call_variants', 'filter_variants', 'preprocess_reads', 'read_qc'])) {
+        error "Unknown mode '${params.mode}'. Use 'map_and_call', 'call_variants', 'filter_variants', 'preprocess_reads' or 'read_qc'."
+    }
+
+    // map_and_call/call_variants/filter_variants run the full pipeline (reference indexing);
+    // preprocess_reads/read_qc are lightweight modes that stop before mapping/variant calling.
+    def run_full_pipeline = params.mode in ['map_and_call', 'call_variants', 'filter_variants']
+    def run_variant_calling = run_full_pipeline && params.mode != 'filter_variants' && !params.skip_variant_calling
+    def run_filtering = run_variant_calling || params.mode == 'filter_variants'
+
+    // Default output channels, overridden below depending on mode
+    fastqc_raw_ch = channel.empty()
+    fastqc_clean_ch = channel.empty()
+    multiqc_rawreads_report = channel.empty()
+    multiqc_cleanreads_report = channel.empty()
+    clean_reads = channel.empty()
+    final_bams = channel.empty()
+    raw_crams = channel.empty()
+    callable_regions_ch = channel.empty()
+    depth_cutoffs = channel.empty()
+    sample_depths = channel.empty()
+    raw_bams_ch = channel.empty()
+    bam_metrics_ch = channel.empty()
+    mapping_depths_ch = channel.empty()
+    qualimap_reports_ch = channel.empty()
+    damage_profiles_ch = channel.empty()
+    downsampled_bams_ch = channel.empty()
+    downsampled_qualimap_reports_ch = channel.empty()
+    reference_genome_ch = channel.empty()
+
+    if (run_full_pipeline) {
 
     // Reference genome
     ch_reference = channel.fromPath(params.reference, checkIfExists: true)
@@ -271,89 +329,171 @@ workflow {
         params.w_scaffolds ?: []
     )
 
-    // ═══════════════════════════════════════════════════════════════════════════════
-    //                     SUBWORKFLOW 2-3: PREPROCESS READS
-    // ═══════════════════════════════════════════════════════════════════════════════
-
-    PREPROCESS_MODERN(
-        ch_input.modern,
-        params.premapping_dedup
-    )
-
-    PREPROCESS_HISTORICAL(
-        ch_input.historical,
-        params.premapping_dedup
-    )
-
-    // Combine multiqc reports
-    multiqc_rawreads_report = PREPROCESS_MODERN.out.multiqc_raw_report
-        .mix(PREPROCESS_HISTORICAL.out.multiqc_raw_report)
-        .collect()
-
-    multiqc_cleanreads_report = PREPROCESS_MODERN.out.multiqc_clean_report
-        .mix(PREPROCESS_HISTORICAL.out.multiqc_clean_report)
-        .collect()
-
-    clean_reads = PREPROCESS_MODERN.out.clean_reads
-        .mix(PREPROCESS_HISTORICAL.out.clean_paired)
-        .mix(PREPROCESS_HISTORICAL.out.clean_merged)
-
-    // ═══════════════════════════════════════════════════════════════════════════════
-    //                     SUBWORKFLOW 4-5: MAP READS
-    // ═══════════════════════════════════════════════════════════════════════════════
-
-    MAP_MODERN(
-        PREPROCESS_MODERN.out.clean_reads,
-        INDEX_REFERENCE.out.bwa_index,
-        params.mapper
-    )
-
-    MAP_HISTORICAL(
-        PREPROCESS_HISTORICAL.out.clean_paired,
-        PREPROCESS_HISTORICAL.out.clean_merged,
-        INDEX_REFERENCE.out.bwa_index,
-        params.map_historical_pairs,
-        params.historical_mapper
-    )
-
-    // ═══════════════════════════════════════════════════════════════════════════════
-    //                     SUBWORKFLOW 6: ESTIMATE DEPTH & POST-PROCESS BAMS
-    // ═══════════════════════════════════════════════════════════════════════════════
-
-    PROCESS_BAMS(
-        MAP_MODERN.out.bam,
-        MAP_HISTORICAL.out.bam,
-        ch_reference,
-        INDEX_REFERENCE.out.reference_fai,
-        INDEX_REFERENCE.out.reference_gzi,
-        INDEX_REFERENCE.out.refintervals,
-        sex_limited_list,
-        non_sex_limited_list,
-        sex_limited_contigs,
-        non_sex_limited_contigs,
-        params.postmapping_dedup,
-        params.damageprofiler_rescale,
-        params.downsample_bams,
-        params.downsample_bams_coverage,
-        params.min_depth,
-        params.max_depth,
-        params.sex_assignment_lower_threshold,
-        params.sex_assignment_upper_threshold
-    )
-
-    // Prepare sample stats channel with consistent tuple size
-    sample_stats = PROCESS_BAMS.out.sample_depths
-        .map { sample_id, autosomal_dp, non_sex_limited_dp, sex_limited_dp, ratio, sex_assignment ->
-            if (sex_chrom_system == 'unknown') {
-                return tuple(sample_id, autosomal_dp, 'NA', 'NA', 'NA', 'NA', 'NA', 'NA', 'NA')
-            } else {
-                return tuple(sample_id, autosomal_dp, non_sex_limited_dp, sex_limited_dp, ratio, sex_assignment, 'NA', 'NA', 'NA')
+    if (params.mode == 'map_and_call') {
+        ch_input = parse_input(params.input)
+            .branch {
+                sample_id, lane, data_type, library, r1, r2 ->
+                modern: data_type == '1'
+                historical: data_type == '2'
             }
+
+        PREPROCESS_MODERN(ch_input.modern, params.premapping_dedup)
+        PREPROCESS_HISTORICAL(ch_input.historical, params.premapping_dedup)
+
+        MAP_MODERN(
+            PREPROCESS_MODERN.out.clean_reads,
+            INDEX_REFERENCE.out.bwa_index,
+            params.mapper
+        )
+        MAP_HISTORICAL(
+            PREPROCESS_HISTORICAL.out.clean_paired,
+            PREPROCESS_HISTORICAL.out.clean_merged,
+            INDEX_REFERENCE.out.bwa_index,
+            params.map_historical_pairs,
+            params.historical_mapper
+        )
+
+        PROCESS_BAMS(
+            MAP_MODERN.out.bam,
+            MAP_HISTORICAL.out.bam,
+            ch_reference,
+            INDEX_REFERENCE.out.reference_fai,
+            INDEX_REFERENCE.out.reference_gzi,
+            INDEX_REFERENCE.out.refintervals,
+            sex_limited_list,
+            non_sex_limited_list,
+            sex_limited_contigs,
+            non_sex_limited_contigs,
+            params.postmapping_dedup,
+            params.damageprofiler_rescale,
+            params.downsample_bams,
+            params.downsample_bams_coverage,
+            params.min_depth,
+            params.max_depth,
+            params.sex_assignment_lower_threshold,
+            params.sex_assignment_upper_threshold
+        )
+
+        final_bams = PROCESS_BAMS.out.final_bam
+        raw_crams = PROCESS_BAMS.out.raw_crams
+        callable_regions_ch = PROCESS_BAMS.out.callable_regions
+        depth_cutoffs = PROCESS_BAMS.out.depth_cutoffs
+        sample_depths = PROCESS_BAMS.out.sample_depths
+        raw_bams_ch = PROCESS_BAMS.out.raw_bams
+        bam_metrics_ch = PROCESS_BAMS.out.cram_metrics
+        mapping_depths_ch = PROCESS_BAMS.out.mapping_depths
+        qualimap_reports_ch = PROCESS_BAMS.out.qualimap_reports
+        damage_profiles_ch = PROCESS_BAMS.out.damage_reports
+        downsampled_bams_ch = PROCESS_BAMS.out.downsampled_crams
+        downsampled_qualimap_reports_ch = PROCESS_BAMS.out.qualimap_downsampled_reports
+        reference_genome_ch = INDEX_REFERENCE.out.bwa_index
+        multiqc_rawreads_report = PREPROCESS_MODERN.out.multiqc_raw_report
+            .mix(PREPROCESS_HISTORICAL.out.multiqc_raw_report).collect()
+        multiqc_cleanreads_report = PREPROCESS_MODERN.out.multiqc_clean_report
+            .mix(PREPROCESS_HISTORICAL.out.multiqc_clean_report).collect()
+        clean_reads = PREPROCESS_MODERN.out.clean_reads
+            .mix(PREPROCESS_HISTORICAL.out.clean_paired)
+            .mix(PREPROCESS_HISTORICAL.out.clean_merged)
+        fastqc_raw_ch = PREPROCESS_MODERN.out.fastqc_raw
+            .mix(PREPROCESS_HISTORICAL.out.fastqc_rawreads)
+        fastqc_clean_ch = PREPROCESS_MODERN.out.fastqc_clean
+            .mix(PREPROCESS_HISTORICAL.out.fastqc_cleanreads)
+    }
+    else {
+        bam_input = parse_bamfile_list(params.bamfiles)
+        extract_sample_from_bam(bam_input)
+        bams_with_samples = extract_sample_from_bam.out.sample_bams
+            .map { bam, bai, sample_id_file ->
+                tuple(sample_id_file.text.trim(), bam, bai)
+            }
+
+        dp_input = bams_with_samples
+            .combine(INDEX_REFERENCE.out.refintervals)
+            .map { sample_id, cram, crai, region_id, regions ->
+                tuple(region_id, regions, sample_id, cram, crai)
+            }
+            .groupTuple(by: [0, 1])
+            .map { region_id, regions, sample_ids, crams, crais ->
+                def zipped = [sample_ids, crams, crais].transpose()
+                    .sort { a, b -> a[0] <=> b[0] }
+                def (ids, sorted_crams, sorted_crais) = zipped.transpose()
+                tuple(region_id, regions, ids, sorted_crams, sorted_crais)
+            }
+
+        region_depths = samtools_dp(dp_input).region_dp
+            .flatMap { region_id, sample_ids, depth_files ->
+                def files = depth_files instanceof List ? depth_files : [depth_files]
+                sample_ids.collect { sample_id ->
+                    def expected = "${region_id}_${sample_id}.depths.bed.gz"
+                    def depth_file = files.find { it.name == expected }
+                    if (!depth_file) error "Missing depth file '${expected}'"
+                    tuple(sample_id, depth_file)
+                }
+            }
+            .groupTuple(by: 0)
+
+        sample_depths = calculate_depth_and_sex(
+            parse_region_depths(region_depths, INDEX_REFERENCE.out.reference_fai).sample_depth_avg,
+            sex_limited_list,
+            non_sex_limited_list
+        )
+
+        depth_cutoffs = sample_depths.map { sample_id, autosomal_dp, _non_sex, _sex, _ratio, sex ->
+            def min_dp = params.min_depth instanceof Integer ? params.min_depth : autosomal_dp * params.min_depth
+            def max_dp = params.max_depth instanceof Integer ? params.max_depth : autosomal_dp * params.max_depth
+            tuple(sample_id, Math.max(1, min_dp), Math.max(2, max_dp), sex)
+        }.combine(parse_region_depths.out.sample_depth_beds, by: 0)
+
+        callable_regions_out = callable_regions(
+            depth_cutoffs
+                .combine(sex_limited_contigs.toList())
+                .combine(non_sex_limited_contigs.toList())
+                .combine(INDEX_REFERENCE.out.reference_fai)
+        ).callable
+        callable_regions_ch = callable_regions_out
+
+        if (params.mode == 'filter_variants') {
+            if (!params.vcf) {
+                error "filter_variants mode requires --vcf <path_to_vcf.gz>"
+            }
+
+            // Compress/index the input VCF, then scatter it across the same
+            // region chunks used by INDEX_REFERENCE so it can feed VARIANT_FILTERS.
+            bcftools_index_vcf(channel.fromPath(params.vcf, checkIfExists: true))
+
+            raw_vcfs_ch = INDEX_REFERENCE.out.refintervals
+                .combine(bcftools_index_vcf.out.indexed_vcf)
+                .map { region_id, regions, vcf, idx -> tuple(region_id, regions, vcf, idx) }
+            bcftools_view_region(raw_vcfs_ch)
+            raw_vcfs_ch = bcftools_view_region.out.vcf
         }
 
-    // Add downsampled stats if downsampling was performed
-    if (params.downsample_bams) {
-        sample_stats = PROCESS_BAMS.out.sample_depths
+        final_bams = bams_with_samples
+        raw_crams = channel.empty()
+        raw_bams_ch = bams_with_samples
+        bam_metrics_ch = channel.empty()
+        mapping_depths_ch = channel.empty()
+        qualimap_reports_ch = channel.empty()
+        damage_profiles_ch = channel.empty()
+        downsampled_bams_ch = channel.empty()
+        downsampled_qualimap_reports_ch = channel.empty()
+        reference_genome_ch = INDEX_REFERENCE.out.reference_fasta
+        multiqc_rawreads_report = channel.empty()
+        multiqc_cleanreads_report = channel.empty()
+        clean_reads = channel.empty()
+        fastqc_raw_ch = channel.empty()
+        fastqc_clean_ch = channel.empty()
+    }
+
+    // Prepare sample stats channel with one normalized tuple shape in both modes.
+    sample_stats = sample_depths
+        .map { sample_id, autosomal_dp, non_sex_limited_dp, sex_limited_dp, ratio, sex_assignment ->
+            tuple(sample_id, autosomal_dp, non_sex_limited_dp, sex_limited_dp,
+                  ratio, sex_assignment, 'NA', 'NA', 'NA')
+        }
+
+    if (params.mode == 'map_and_call' && params.downsample_bams) {
+        sample_stats = sample_depths
             .combine(PROCESS_BAMS.out.sample_depths_downsampled, by: 0)
             .map { sample_id, autosomal_dp, non_sex_limited_dp, sex_limited_dp, ratio, sex_assignment,
                    ds_autosomal_dp, ds_non_sex_limited_dp, ds_sex_limited_dp, ds_ratio, ds_sex_assignment ->
@@ -366,14 +506,88 @@ workflow {
             }
     }
 
+    } // End of run_full_pipeline (map_and_call / call_variants) section
+    else if (params.mode == 'preprocess_reads') {
+
+        // ═══════════════════════════════════════════════════════════════════════
+        //                     PREPROCESS_READS MODE
+        // Preprocessing only (adapter trimming/quality filtering); no mapping.
+        // ═══════════════════════════════════════════════════════════════════════
+        println "Running PREPROCESS_READS mode: preprocessing only, outputting clean reads."
+
+        ch_input = parse_input(params.input)
+            .branch {
+                sample_id, lane, data_type, library, r1, r2 ->
+                modern: data_type == '1'
+                historical: data_type == '2'
+            }
+
+        PREPROCESS_MODERN(ch_input.modern, params.premapping_dedup)
+        PREPROCESS_HISTORICAL(ch_input.historical, params.premapping_dedup)
+
+        multiqc_rawreads_report = PREPROCESS_MODERN.out.multiqc_raw_report
+            .mix(PREPROCESS_HISTORICAL.out.multiqc_raw_report)
+            .collect()
+
+        multiqc_cleanreads_report = PREPROCESS_MODERN.out.multiqc_clean_report
+            .mix(PREPROCESS_HISTORICAL.out.multiqc_clean_report)
+            .collect()
+
+        clean_reads = PREPROCESS_MODERN.out.clean_reads
+            .mix(PREPROCESS_HISTORICAL.out.clean_paired)
+            .mix(PREPROCESS_HISTORICAL.out.clean_merged)
+
+        fastqc_raw_ch = PREPROCESS_MODERN.out.fastqc_raw
+            .mix(PREPROCESS_HISTORICAL.out.fastqc_rawreads)
+        fastqc_clean_ch = PREPROCESS_MODERN.out.fastqc_clean
+            .mix(PREPROCESS_HISTORICAL.out.fastqc_cleanreads)
+    }
+    else {
+
+        // ═══════════════════════════════════════════════════════════════════════
+        //                     READ_QC MODE
+        // FastQC/MultiQC only; quick QC assessment before running the full pipeline.
+        // ═══════════════════════════════════════════════════════════════════════
+        println "Running READ_QC mode: FastQC/MultiQC only, no preprocessing or mapping."
+
+        if (params.input) {
+            ch_qc_input = parse_input(params.input)
+                .map { sample_id, lane, _data_type, library, r1, r2 ->
+                    tuple(sample_id, lane, library, [r1, r2], 'raw_reads')
+                }
+        } else if (!params.reads_dir) {
+            error "No input file or reads directory provided. Please provide either --input <metadata.csv> or --reads_dir <path_to_reads>."
+        } else {
+            println "No input file provided. Scanning reads directory for FASTQ files..."
+            ch_qc_input = channel
+                .fromPath("${params.reads_dir}/*.{fq,fastq}{,.gz}", checkIfExists: true)
+                .map { filename ->
+                    def sample = filename.baseName.replaceFirst(/\.f(ast)?q$/, '')
+                    tuple(sample, 'single_lane', sample, [filename], 'raw_reads')
+                }
+        }
+
+        fastqc(ch_qc_input)
+
+        all_fastqc_outputs = fastqc.out.zip
+            .map { _sample_id, _lane, _library, zips -> zips }
+            .collect()
+            .map { zips -> tuple(zips, params.name) }
+
+        multiqc_fastqc(all_fastqc_outputs)
+
+        fastqc_raw_ch = fastqc.out.html
+        multiqc_rawreads_report = multiqc_fastqc.out.report
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════════
     //                     SUBWORKFLOW 7-8: VARIANT CALLING & FILTERING
     // ═══════════════════════════════════════════════════════════════════════════════
 
-    if (!params.skip_variant_calling) {
+    if (run_variant_calling) {
 
         VARIANT_CALLING(
-            PROCESS_BAMS.out.final_bam,
+            final_bams,
             ch_reference,
             INDEX_REFERENCE.out.reference_fai,
             INDEX_REFERENCE.out.reference_gzi,
@@ -383,7 +597,7 @@ workflow {
             params.popfile,
             sample_stats,
             params.store_raw_vcf,
-            PROCESS_BAMS.out.raw_crams
+            raw_crams
         )
 
         VARIANT_FILTERS(
@@ -392,8 +606,8 @@ workflow {
             INDEX_REFERENCE.out.reference_fai,
             INDEX_REFERENCE.out.reference_gzi,
             INDEX_REFERENCE.out.refintervals,
-            PROCESS_BAMS.out.callable_regions,
-            PROCESS_BAMS.out.depth_cutoffs,
+            callable_regions_ch,
+            depth_cutoffs,
             sex_limited_contigs,
             params.variant_caller,
             params.snp_filter_expression,
@@ -424,6 +638,33 @@ workflow {
         combine_summary_tables(parse_summary_stats.out.summary_statistics.collect())
 
     } // End of variant calling section
+    else if (params.mode == 'filter_variants') {
+
+        // ═══════════════════════════════════════════════════════════════════════
+        //                     FILTER_VARIANTS MODE
+        // Runs VARIANT_FILTERS on a pre-existing VCF against provided BAMs, with
+        // no variant calling step.
+        // ═══════════════════════════════════════════════════════════════════════
+        VARIANT_FILTERS(
+            raw_vcfs_ch,
+            ch_reference,
+            INDEX_REFERENCE.out.reference_fai,
+            INDEX_REFERENCE.out.reference_gzi,
+            INDEX_REFERENCE.out.refintervals,
+            callable_regions_ch,
+            depth_cutoffs,
+            sex_limited_contigs,
+            params.variant_caller,
+            params.snp_filter_expression,
+            params.indel_filter_expression,
+            params.snp_filter_expression_bcftools,
+            params.snp_filter_expression_freebayes,
+            params.snp_filter_expression_gatk,
+            params.indel_filter_expression_bcftools,
+            params.indel_filter_expression_freebayes,
+            params.indel_filter_expression_gatk
+        )
+    }
 
     // ═══════════════════════════════════════════════════════════════════════════════
     //                     PUBLISH OUTPUTS
@@ -431,10 +672,8 @@ workflow {
 
     publish:
     // FastQC / MultiQC reports on raw and trimmed reads
-    fastqc_raw = PREPROCESS_MODERN.out.fastqc_raw
-        .mix(PREPROCESS_HISTORICAL.out.fastqc_rawreads)
-    fastqc_clean = PREPROCESS_MODERN.out.fastqc_clean
-        .mix(PREPROCESS_HISTORICAL.out.fastqc_cleanreads)
+    fastqc_raw = fastqc_raw_ch
+    fastqc_clean = fastqc_clean_ch
 
     multiqc_rawreads_report   = multiqc_rawreads_report
     multiqc_cleanreads_report = multiqc_cleanreads_report
@@ -443,45 +682,46 @@ workflow {
     clean_reads = clean_reads
 
     // Per-sample CRAM QC reports
-    qualimap_reports = PROCESS_BAMS.out.qualimap_reports
-    qualimap_downsampled_reports = params.downsample_bams ? PROCESS_BAMS.out.qualimap_downsampled_reports : channel.empty()
+    qualimap_reports = qualimap_reports_ch
+    qualimap_downsampled_reports = downsampled_qualimap_reports_ch
 
     // Raw CRAM files and deduplicated metrics
-    bamfiles = PROCESS_BAMS.out.raw_bams
-    bam_metrics = PROCESS_BAMS.out.cram_metrics
-    mapping_depths = PROCESS_BAMS.out.mapping_depths
-    cramfiles = params.store_crams ? PROCESS_BAMS.out.raw_crams : channel.empty()
-    downsampled_cramfiles = (params.downsample_bams && params.store_crams) ? PROCESS_BAMS.out.downsampled_crams : channel.empty()
+    bamfiles = raw_bams_ch
+    bam_metrics = bam_metrics_ch
+    mapping_depths = mapping_depths_ch
+    cramfiles = params.store_crams ? raw_crams : channel.empty()
+    downsampled_cramfiles = params.store_crams ? downsampled_bams_ch : channel.empty()
 
     // Reference genome
-    reference_genome = INDEX_REFERENCE.out.bwa_index
+    reference_genome = reference_genome_ch
 
     // Downsampled BAM files
-    downsampled_bamfiles = params.downsample_bams ? PROCESS_BAMS.out.final_bam : PROCESS_BAMS.out.final_bam
+    downsampled_bamfiles = downsampled_bams_ch
 
-    // Variant calling outputs (conditional on skip_variant_calling)
-    raw_vcf = !params.skip_variant_calling ? VARIANT_CALLING.out.raw_vcf : channel.empty()
-    filtered_snps = !params.skip_variant_calling ? VARIANT_FILTERS.out.filtered_snps : channel.empty()
-    filtered_indels = !params.skip_variant_calling ? VARIANT_FILTERS.out.filtered_indels : channel.empty()
+    // Variant calling outputs (conditional on skip_variant_calling); raw_vcf/raw_variant_stats
+    // only come from the VARIANT_CALLING subworkflow, so they don't apply to filter_variants mode
+    raw_vcf = run_variant_calling ? VARIANT_CALLING.out.raw_vcf : channel.empty()
+    filtered_snps = run_filtering ? VARIANT_FILTERS.out.filtered_snps : channel.empty()
+    filtered_indels = run_filtering ? VARIANT_FILTERS.out.filtered_indels : channel.empty()
 
     // Callable regions
-    callable_regions = !params.skip_variant_calling ? VARIANT_FILTERS.out.callable_regions_bed : channel.empty()
-    snpable_regions = !params.skip_variant_calling ? VARIANT_FILTERS.out.snpable_regions_bed : channel.empty()
-    invariant_calls = !params.skip_variant_calling ? VARIANT_FILTERS.out.invariant_calls_bed : channel.empty()
+    callable_regions = run_filtering ? VARIANT_FILTERS.out.callable_regions_bed : channel.empty()
+    snpable_regions = run_filtering ? VARIANT_FILTERS.out.snpable_regions_bed : channel.empty()
+    invariant_calls = run_filtering ? VARIANT_FILTERS.out.invariant_calls_bed : channel.empty()
 
     // Variant statistics
-    raw_variant_stats = !params.skip_variant_calling ? VARIANT_CALLING.out.raw_variant_stats : channel.empty()
-    raw_vcf_stats_plot = !params.skip_variant_calling ? VARIANT_CALLING.out.raw_vcf_stats_plot : channel.empty()
-    filtered_snps_stats = !params.skip_variant_calling ? VARIANT_FILTERS.out.filtered_snps_stats : channel.empty()
-    filtered_snps_stats_plot = !params.skip_variant_calling ? VARIANT_FILTERS.out.filtered_snps_stats_plot : channel.empty()
-    filtered_indel_stats = !params.skip_variant_calling ? VARIANT_FILTERS.out.filtered_indel_stats : channel.empty()
-    filtered_indel_stats_plot = !params.skip_variant_calling ? VARIANT_FILTERS.out.filtered_indel_stats_plot : channel.empty()
+    raw_variant_stats = run_variant_calling ? VARIANT_CALLING.out.raw_variant_stats : channel.empty()
+    raw_vcf_stats_plot = run_variant_calling ? VARIANT_CALLING.out.raw_vcf_stats_plot : channel.empty()
+    filtered_snps_stats = run_filtering ? VARIANT_FILTERS.out.filtered_snps_stats : channel.empty()
+    filtered_snps_stats_plot = run_filtering ? VARIANT_FILTERS.out.filtered_snps_stats_plot : channel.empty()
+    filtered_indel_stats = run_filtering ? VARIANT_FILTERS.out.filtered_indel_stats : channel.empty()
+    filtered_indel_stats_plot = run_filtering ? VARIANT_FILTERS.out.filtered_indel_stats_plot : channel.empty()
 
-    // Summary statistics
-    summary_statistics = !params.skip_variant_calling ? combine_summary_tables.out.table : channel.empty()
+    // Summary statistics (requires VARIANT_CALLING.out.pops, so map_and_call/call_variants only)
+    summary_statistics = run_variant_calling ? combine_summary_tables.out.table : channel.empty()
 
     // Damage profiles
-    damage_profiles = PROCESS_BAMS.out.damage_reports
+    damage_profiles = damage_profiles_ch
 }
 
 output {

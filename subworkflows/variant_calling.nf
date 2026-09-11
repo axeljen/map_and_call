@@ -66,18 +66,11 @@ workflow VARIANT_CALLING {
     // ─────────────────────────────────────────────────────────────────────────────
     // Prepare reference bundle with all index files
     // ─────────────────────────────────────────────────────────────────────────────
-    ref_index_ch = bwa_index
-        .map { _reference, index_files -> index_files }
     ref_bundle_ch = ch_reference
         .combine(reference_fai)
         .combine(reference_gzi)
-        .combine(ref_index_ch)
-        .map { row ->
-            def reference = row[0]
-            def fai = row[1]
-            def gzi = row[2]
-            def bwa_indices = row[3..-1]
-            tuple(reference, [fai, gzi] + bwa_indices)
+        .map { reference, fai, gzi ->
+            tuple(reference, [fai, gzi])
         }
 
     varcall_ch = bams_for_calling
