@@ -36,6 +36,7 @@ include { finalize_masks } from '../modules/bedtools/finalize_masks'
 include { combine_bedfiles as combine_homref_invariants } from '../modules/bedtools/combine_bedfiles'
 include { combine_bedfiles as combine_mappability_masks } from '../modules/bedtools/combine_bedfiles'
 include { combine_bedfiles as combine_mappability_masks_snps } from '../modules/bedtools/combine_bedfiles'
+include { concatenate_masks } from '../modules/bedtools/combine_bedfiles'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helper functions
@@ -157,26 +158,48 @@ workflow VARIANT_FILTERS {
     refintervals_ch
         .combine(bcftools_filter_snps.out.vcf, by: 0)
         .combine(callable_regions)
+        .groupTuple(by: [0,1,2,3])
+
+    refintervals_ch
+        .combine(bcftools_filter_indels.out.vcf, by: 0)
+        .combine(callable_regions)
+        .groupTuple(by: [0,1,2,3])
+
     // run through callability filter
     callability_filter_snps(
         refintervals_ch
         .combine(bcftools_filter_snps.out.vcf, by: 0)
         .combine(callable_regions)
+        .groupTuple(by: [0,1,2,3])
+        .map { region_id, regions, vcfs, csis, samples, bedfiles ->
+            def zipped = [samples, bedfiles].transpose()
+                .sort { a, b -> a[0] <=> b[0] }
+            def (sorted_samples, sorted_bedfiles) = zipped.transpose()
+            tuple(region_id, regions, vcfs, csis, sorted_samples, sorted_bedfiles, 'snps')
+        }
         )
+        
     callability_filter_indels(
         refintervals_ch
         .combine(bcftools_filter_indels.out.vcf, by: 0)
         .combine(callable_regions)
+        .groupTuple(by: [0,1,2,3])
+        .map { region_id, regions, vcfs, csis, samples, bedfiles ->
+            def zipped = [samples, bedfiles].transpose()
+                .sort { a, b -> a[0] <=> b[0] }
+            def (sorted_samples, sorted_bedfiles) = zipped.transpose()
+            tuple(region_id, regions, vcfs, csis, sorted_samples, sorted_bedfiles, 'indels')
+        }
         )
-    
+    callability_filter_snps.out.vcf
     // push through allele balance filter
     ab_filter_snps(
         callability_filter_snps.out.vcf
-            .map { region_id, sample, vcf, csi -> tuple(region_id, sample, vcf, csi, 'snps') }
+            // .map { region_id, vcf, csi -> tuple(region_id, sample, vcf, csi, 'snps') }
         )
     ab_filter_indels(
         callability_filter_indels.out.vcf
-            .map { region_id, sample, vcf, csi -> tuple(region_id, sample, vcf, csi, 'indels') }
+            // .map { region_id, sample, vcf, csi -> tuple(region_id, sample, vcf, csi, 'indels') }
             )
 
     // // ─────────────────────────────────────────────────────────────────────────────
@@ -184,35 +207,35 @@ workflow VARIANT_FILTERS {
     // // ─────────────────────────────────────────────────────────────────────────────
 
     
-    bcftools_merge_snps(ab_filter_snps.out.vcf
-        .groupTuple(by: 0)
-        .map {region_id, sample_ids, sample_vcfs, idxs -> tuple(region_id, sample_ids, sample_vcfs, idxs, 'snps_abfiltered')}
-        // ensure that sample vcf files are always sorted in the same order so that we can concatenate later on
-        .map { region_id, sample_ids, sample_vcfs, idxs, category ->
-            def zipped = [sample_ids, sample_vcfs, idxs].transpose()
-                .sort { a, b -> a[0] <=> b[0] } // sort by sample ID
-            def (sample_ids_sorted, sample_vcfs_sorted, idxs_sorted) = zipped.transpose()
-            tuple(region_id, sample_ids_sorted, sample_vcfs_sorted, idxs_sorted, category)
-        }
-    )
-    bcftools_merge_indels(ab_filter_indels.out.vcf
-        .groupTuple(by: 0)
-        .map {region_id, sample_ids, sample_vcfs, idxs -> tuple(region_id, sample_ids, sample_vcfs, idxs, 'indels_abfiltered')}
-        // ensure that sample vcf files are always sorted in the same order so that we can concatenate later on
-        .map { region_id, sample_ids, sample_vcfs, idxs, category ->
-            def zipped = [sample_ids, sample_vcfs, idxs].transpose()
-                .sort { a, b -> a[0] <=> b[0] } // sort by sample ID
-            def (sample_ids_sorted, sample_vcfs_sorted, idxs_sorted) = zipped.transpose()
-            tuple(region_id, sample_ids_sorted, sample_vcfs_sorted, idxs_sorted, category)
-        }
-    )
+    // bcftools_merge_snps(ab_filter_snps.out.vcf
+    //     .groupTuple(by: 0)
+    //     .map {region_id, sample_ids, sample_vcfs, idxs -> tuple(region_id, sample_ids, sample_vcfs, idxs, 'snps_abfiltered')}
+    //     // ensure that sample vcf files are always sorted in the same order so that we can concatenate later on
+    //     .map { region_id, sample_ids, sample_vcfs, idxs, category ->
+    //         def zipped = [sample_ids, sample_vcfs, idxs].transpose()
+    //             .sort { a, b -> a[0] <=> b[0] } // sort by sample ID
+    //         def (sample_ids_sorted, sample_vcfs_sorted, idxs_sorted) = zipped.transpose()
+    //         tuple(region_id, sample_ids_sorted, sample_vcfs_sorted, idxs_sorted, category)
+    //     }
+    // )
+    // bcftools_merge_indels(ab_filter_indels.out.vcf
+    //     .groupTuple(by: 0)
+    //     .map {region_id, sample_ids, sample_vcfs, idxs -> tuple(region_id, sample_ids, sample_vcfs, idxs, 'indels_abfiltered')}
+    //     // ensure that sample vcf files are always sorted in the same order so that we can concatenate later on
+    //     .map { region_id, sample_ids, sample_vcfs, idxs, category ->
+    //         def zipped = [sample_ids, sample_vcfs, idxs].transpose()
+    //             .sort { a, b -> a[0] <=> b[0] } // sort by sample ID
+    //         def (sample_ids_sorted, sample_vcfs_sorted, idxs_sorted) = zipped.transpose()
+    //         tuple(region_id, sample_ids_sorted, sample_vcfs_sorted, idxs_sorted, category)
+    //     }
+    // )
     
 
     // // ─────────────────────────────────────────────────────────────────────────────
     // // Last set of popgen filters based on missingness and allele frequency
     // // ─────────────────────────────────────────────────────────────────────────────
-    bcftools_fmiss_maf_filtered_snps = bcftools_filter_fmiss_maf_snps(bcftools_merge_snps.out.vcf, 'snps')
-    bcftools_fmiss_maf_filtered_indels = bcftools_filter_fmiss_maf_indels(bcftools_merge_indels.out.vcf, 'indels')
+    bcftools_fmiss_maf_filtered_snps = bcftools_filter_fmiss_maf_snps(ab_filter_snps.out.vcf, 'snps')
+    bcftools_fmiss_maf_filtered_indels = bcftools_filter_fmiss_maf_indels(ab_filter_indels.out.vcf, 'indels')
 
     // // ─────────────────────────────────────────────────────────────────────────────
     // // Generate statistics for filtered variants
@@ -255,46 +278,93 @@ workflow VARIANT_FILTERS {
     // // ─────────────────────────────────────────────────────────────────────────────
     finalize_masks_input = refintervals_ch
         .combine(callable_regions)
-        .combine(bcftools_merge_snps.out.vcf, by: 0)
-        .combine(bcftools_merge_indels.out.vcf, by: 0)
+        .combine(ab_filter_snps.out.vcf, by: 0)
+        .combine(ab_filter_indels.out.vcf, by: 0)
+        .groupTuple(by: [0,1,4,5,6,7])
         .map {
-            region_id, region, sample_id, callable_bed, snp_vcf, _snp_idx, indel_vcf, _indel_idx ->
-                tuple(sample_id, region_id, region, callable_bed, snp_vcf, indel_vcf)
+            region_id, regions, samples, bedfiles, snp_vcf, snp_idx, indel_vcf, indel_idx ->
+                tuple(samples, region_id, regions, bedfiles, snp_vcf, snp_idx, indel_vcf, indel_idx)
         }
 
     region_masks = finalize_masks(finalize_masks_input)
     
-    // // Extract and group by sample for final merging
+    // Extract each sample's files from every regional emission, then group by sample.
     region_homrefs = region_masks.homref_invariants
+        .flatMap { sample_ids, region_id, files ->
+            sample_ids.collectMany { sample_id ->
+                files.findAll { file -> file.getName().startsWith("${sample_id}_") }
+                    .collect { file -> tuple(sample_id, tuple(region_id, file)) }
+            }
+        }
         .groupTuple(by: 0)
     region_totalmask = region_masks.mappability_mask
+        .flatMap { sample_ids, region_id, files ->
+            sample_ids.collectMany { sample_id ->
+                files.findAll { file -> file.getName().startsWith("${sample_id}_") }
+                    .collect { file -> tuple(sample_id, tuple(region_id, file)) }
+            }
+        }
         .groupTuple(by: 0)
     region_snpmask = region_masks.mappability_mask_snps
+        .flatMap { sample_ids, region_id, files ->
+            sample_ids.collectMany { sample_id ->
+                files.findAll { file -> file.getName().startsWith("${sample_id}_") }
+                    .collect { file -> tuple(sample_id, tuple(region_id, file)) }
+            }
+        }
         .groupTuple(by: 0)
 
-    // // Concatenate regional masks into genome-wide files for output
-    homrefs = combine_homref_invariants(
-        region_homrefs
-        .combine(reference_fai)
-        .map { sample_id, bedfiles, fai -> tuple(sample_id, bedfiles, fai, 'homref_invariants') }
+    masks_by_sample = region_homrefs
+        .join(region_totalmask)
+        .join(region_snpmask)
+        .map { sample_id, homref_masks, total_masks, snp_masks ->
+            tuple(
+                sample_id,
+                homref_masks.sort { a, b -> a[0] <=> b[0] }.collect { region_file -> region_file[1] },
+                total_masks.sort { a, b -> a[0] <=> b[0] }.collect { region_file -> region_file[1] },
+                snp_masks.sort { a, b -> a[0] <=> b[0] }.collect { region_file -> region_file[1] }
+            )
+        }
+
+    concatenated_masks = concatenate_masks(
+        masks_by_sample
     )
-    total_mask = combine_mappability_masks(
-        region_totalmask
-        .combine(reference_fai)
-        .map { sample_id, bedfiles, fai -> tuple(sample_id, bedfiles, fai, 'mappability_mask') }
-    )
-    snp_mask = combine_mappability_masks_snps(
-        region_snpmask
-        .combine(reference_fai)
-        .map { sample_id, bedfiles, fai -> tuple(sample_id, bedfiles, fai, 'snp_mask') }
-    )
+    concatenated_masks.homref_mask.view()
+    concatenated_masks.mappability_mask.view()
+    concatenated_masks.snp_mask.view()
+
+    // // // Concatenate regional masks into genome-wide files for output
+    // homrefs = combine_homref_invariants(
+    //     masks_by_sample
+    //     .map { sample_id, homref_masks, total_masks, snp_masks ->
+    //         tuple(sample_id, homref_masks)
+    //     }
+    //     .combine(reference_fai)
+    //     .map { sample_id, bedfiles, fai -> tuple(sample_id, bedfiles, fai, 'homref_invariants') }
+    // )
+    // total_mask = combine_mappability_masks(
+    //     masks_by_sample
+    //     .map { sample_id, homref_masks, total_masks, snp_masks ->
+    //         tuple(sample_id, total_masks)
+    //     }
+    //     .combine(reference_fai)
+    //     .map { sample_id, bedfiles, fai -> tuple(sample_id, bedfiles, fai, 'mappability_mask') }
+    // )
+    // snp_mask = combine_mappability_masks_snps(
+    //     masks_by_sample
+    //     .map { sample_id, homref_masks, total_masks, snp_masks ->
+    //         tuple(sample_id, snp_masks)
+    //     }
+    //     .combine(reference_fai)
+    //     .map { sample_id, bedfiles, fai -> tuple(sample_id, bedfiles, fai, 'snp_mask') }
+    // )
 
     emit:
     filtered_snps = bcftools_concat_snps.out.vcf
     filtered_indels = bcftools_concat_indels.out.vcf
-    callable_regions_bed = total_mask.bedfile
-    snpable_regions_bed = snp_mask.bedfile
-    invariant_calls_bed = homrefs.bedfile
+    callable_regions_bed = concatenated_masks.mappability_mask
+    snpable_regions_bed = concatenated_masks.snp_mask
+    invariant_calls_bed = concatenated_masks.homref_mask
     filtered_snps_stats = combined_stats_snps.combined_summary_statistics
     filtered_snps_stats_plot = plot_snp_stats.out.report
     filtered_indel_stats = combined_stats_indels.combined_summary_statistics
