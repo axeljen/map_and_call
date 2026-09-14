@@ -97,13 +97,13 @@ $ sbatch run_on_dardel.sh
 
 Input files:
 
-1. Reference genome (nt sequences) in FASTA format. Can be compressed (gzip) or not.
-2. Paired-end sequencing reads in FASTQ format. Can be compressed (gzip) or
+1. **Reference genome** (nt sequences) in FASTA format. Can be compressed (gzip) or not.
+2. **Paired-end sequencing reads** in FASTQ format. Can be compressed (gzip) or
 not. Files need to have the suffix `.fq`, `.fastq`, `.fq.gz`, or `.fastq.gz`.
 
-Furthermore, information about sample names, library names, and sample type
-("modern" or "historical") needs to be provided. See [Prepare an input
-sample sheet](#2-prepare-an-input-sample-sheet) for details.
+Furthermore, information about **sample names**, **library names**, and
+**sample type** ("modern" or "historical") needs to be provided. See [Prepare
+an input sample sheet](#2-prepare-an-input-sample-sheet) for details.
 
 In addition, workflow parameters can be changed by editing the config file
 ([nextflow.config](nextflow.config)) or by using command-line options (see
