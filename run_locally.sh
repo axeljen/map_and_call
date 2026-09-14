@@ -23,4 +23,5 @@ nextflow run main.nf \
     --variant_caller freebayes \
     --outdir test/freebayes_new_sing \
     -work-dir with_singularity \
-    --with_singularity 
+    --with_singularity \
+    --chunk_size 5

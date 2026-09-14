@@ -18,6 +18,7 @@ include { qualimap } from '../modules/qualimap/qualimap'
 include { qualimap as qualimap_downsampled } from '../modules/qualimap/qualimap'
 include { samtools_dp } from '../modules/samtools/samtools_dp_process'
 include { samtools_dp as samtools_dp_downsampled } from '../modules/samtools/samtools_dp_process'
+//include { samtools_dp_collective as samtools_dp_test } from '../modules/samtools/samtools_dp_process'
 include { parse_region_depths } from '../modules/samtools/parse_region_depths'
 include { parse_region_depths as parse_region_depths_downsampled } from '../modules/samtools/parse_region_depths'
 include { samtools_downsample } from '../modules/samtools/samtools_downsample'
@@ -145,7 +146,6 @@ workflow PROCESS_BAMS {
             modern:     datatype == '1'
             historical: datatype == '2'
         }
-    per_sample_bams.multi.view { bams -> "Merged BAMs: ${bams}" }
     
     // if multilib bams have been merged, we can delete the original, unmerged bams to save space if progressive cleanup is enabled
     if (params.progressive_cleanup) {
@@ -159,8 +159,6 @@ workflow PROCESS_BAMS {
             .transpose(by: [2, 3])
 
         cleanup_unmerged_bams(unmerged_to_clean)
-            .deleted_files
-            .view( { bams -> "Deleting unmerged BAMs: ${bams}" })
     }
 
     // ─────────────────────────────────────────────────────────────────────────────
@@ -179,10 +177,7 @@ workflow PROCESS_BAMS {
             nondedup_to_clean = dedup_bams.bam
                 .map { sample_id, datatype, _bam, _bai -> tuple(sample_id, datatype) }
                 .combine(rawbams, by: [0,1])
-            nondedup_to_clean.view { bams -> "Preparing to delete non-deduplicated BAMs: ${bams}" }
             cleanup_nondedup_bams(nondedup_to_clean)
-                .deleted_files
-                .view( { bams -> "Deleting non-deduplicated BAMs: ${bams}" })
         }
     } else {
         cram_metrics = channel.empty()
@@ -206,8 +201,6 @@ workflow PROCESS_BAMS {
             unrescaled_to_clean = rescaled_bams.map { sample_id, datatype, _bam, _bai -> tuple(sample_id, datatype) }
                 .combine(all_sample_bams.historical, by: [0,1])
             cleanup_nonrescaled_bams(unrescaled_to_clean)
-                .deleted_files
-                .view( { bams -> "Deleting unrescaled BAMs: ${bams}" })
         }
     } else {
         println "Damage profiling and rescaling is disabled. Skipping this step and using original BAMs for downstream analyses."
@@ -239,10 +232,50 @@ workflow PROCESS_BAMS {
     }
     bams_for_calling_ch = final_bam_ch
 
+    final_bam_ch.map {
+        sample, bam, bai -> tuple([sample, bam, bai])
+    }
+
     dp_input_ch = final_bam_ch
         .combine(refintervals_ch)
+        .map { sample_id, cram, crai, region_id, regions ->
+            tuple(
+                region_id,
+                regions,
+                sample_id,
+                cram,
+                crai
+            )
+        }
+        .groupTuple(by: [0, 1])
+        .map { region_id, regions, sample_ids, crams, crais ->
+            def zipped = [sample_ids, crams, crais].transpose()
+                .sort { a, b -> a[0] <=> b[0] }
+            def (sorted_sample_ids, sorted_crams, sorted_crais) = zipped.transpose()
+            tuple(region_id, regions, sorted_sample_ids, sorted_crams, sorted_crais)
+        }
 
-    region_depths = samtools_dp(dp_input_ch)
+    region_depths = samtools_dp(dp_input_ch).region_dp
+        .flatMap { region_id, sample_ids, depth_files ->
+
+            def files = depth_files instanceof List
+                ? depth_files
+                : [depth_files]
+
+            sample_ids.collect { sample_id ->
+                def expected_name = "${region_id}_${sample_id}.depths.bed.gz"
+                def depth_file = files.find { it.name == expected_name }
+
+                if (!depth_file) {
+                    throw new IllegalStateException(
+                        "Missing depth file for sample '${sample_id}', " +
+                        "region '${region_id}': expected '${expected_name}'"
+                    )
+                }
+
+                tuple(sample_id, depth_file)
+            }
+        }
         .groupTuple(by: 0)
 
     sample_depths = calculate_depth_and_sex(

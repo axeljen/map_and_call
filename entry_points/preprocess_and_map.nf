@@ -27,12 +27,13 @@ include { PROCESS_BAMS } from '../subworkflows/process_bams'
 // ─────────────────────────────────────────────────────────────────────────────
 
 /*
- * Parse input metadata CSV
+ * Parse input metadata CSV (semicolon, comma, tab, or whitespace separated)
  */
 def parse_input(metadata_file) {
+    def sheet = WorkflowUtils.prepareSampleSheet(metadata_file)
     return channel
-        .fromPath(metadata_file)
-        .splitCsv(header: true, sep: ';')
+        .fromPath(sheet.path)
+        .splitCsv(header: true, sep: sheet.sep)
         .filter { row -> !row.sample_id.startsWith('#') }
         .map { row ->
             def data_type = row.data_type
