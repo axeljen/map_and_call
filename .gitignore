@@ -25,3 +25,4 @@ test*
 .conda*
 conf/CONTAINER_BUILD_CHECKLIST.md
 .community*
+example*
