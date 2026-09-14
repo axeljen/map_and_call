@@ -78,8 +78,8 @@ process finalize_masks {
 
     script:
     def region_list = regions.join(' ')
-    def samples = samples.join(' ')
-    def bedfiles = bedfiles.join(' ')
+    def sample_names = samples.join(' ')
+    def bedfile_paths = bedfiles.join(' ')
     """
     # make dummy bedfile for filtering input bed
     for region in ${region_list};
@@ -91,8 +91,8 @@ process finalize_masks {
     done
 
     # iterate through all the samples
-    sample_list=(${samples})
-    bedlist=(${bedfiles})
+    sample_list=(${sample_names})
+    bedlist=(${bedfile_paths})
 
     for i in \${!sample_list[@]}; do
         sample_id="\${sample_list[\$i]}"

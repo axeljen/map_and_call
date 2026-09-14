@@ -69,13 +69,13 @@ process callability_filter {
 
     script:
     def region_list = regions.join(' ')
-    def sample_list = sample_list.join(' ')
-    def callable_regions_list = callable_regions_list.join(' ')
+    def sample_names = sample_list.join(' ')
+    def callable_region_paths = callable_regions_list.join(' ')
 
     """
     # define bash arrays from lists
-    sample_list=(${sample_list})
-    callable_regions=(${callable_regions_list})
+    sample_list=(${sample_names})
+    callable_regions=(${callable_region_paths})
 
     for i in \${!sample_list[@]}; do
     sample="\${sample_list[\$i]}"

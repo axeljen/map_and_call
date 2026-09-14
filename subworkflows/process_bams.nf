@@ -248,8 +248,8 @@ workflow PROCESS_BAMS {
             )
         }
         .groupTuple(by: [0, 1])
-        .map { region_id, regions, sample_ids, crams, crais ->
-            def zipped = [sample_ids, crams, crais].transpose()
+        .map { region_id, regions, sample_ids, cram_paths, crais ->
+            def zipped = [sample_ids, cram_paths, crais].transpose()
                 .sort { a, b -> a[0] <=> b[0] }
             def (sorted_sample_ids, sorted_crams, sorted_crais) = zipped.transpose()
             tuple(region_id, regions, sorted_sample_ids, sorted_crams, sorted_crais)
