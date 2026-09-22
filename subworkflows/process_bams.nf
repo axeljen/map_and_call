@@ -12,6 +12,7 @@
 include { samtools_merge } from '../modules/samtools/mergebams'
 include { samtools_markdups } from '../modules/samtools/samtools_markdups'
 include { samtools_bam2cram } from '../modules/samtools/samtools_bam2cram'
+include { samtools_bam2cram as samtools_bam2cram_ds } from '../modules/samtools/samtools_bam2cram'
 include { damage_profiler } from '../modules/mapdamage/damageprofiler'
 include { damage_profiler_rescale } from '../modules/mapdamage/damageprofiler_rescale'
 include { qualimap } from '../modules/qualimap/qualimap'
@@ -332,15 +333,52 @@ workflow PROCESS_BAMS {
 
         // convert downsampled bams to cram if requested
         if (params.store_crams) {
-            downsampled_crams = samtools_bam2cram(bams_for_calling_ch
+            downsampled_crams = samtools_bam2cram_ds(bams_for_calling_ch
                 .combine(ch_reference)
                 .combine(reference_fai)
                 .combine(reference_gzi))
         }
 
         // Fetch the per-base coverage for the downsampled bams
-        region_depths_downsampled = samtools_dp_downsampled(bams_for_calling_ch
-            .combine(refintervals_ch))
+        dp_input_ch_downsampled = bams_for_calling_ch
+            .combine(refintervals_ch)
+            .map { sample_id, bam, bai, region_id, regions ->
+                tuple(
+                    region_id,
+                    regions,
+                    sample_id,
+                    bam,
+                    bai
+                )
+            }
+            .groupTuple(by: [0, 1])
+            .map { region_id, regions, sample_ids, bam_paths, bais ->
+                def zipped = [sample_ids, bam_paths, bais].transpose()
+                    .sort { a, b -> a[0] <=> b[0] }
+                def (sorted_sample_ids, sorted_bams, sorted_bais) = zipped.transpose()
+                tuple(region_id, regions, sorted_sample_ids, sorted_bams, sorted_bais)
+            }
+
+        region_depths_downsampled = samtools_dp_downsampled(dp_input_ch_downsampled).region_dp
+            .flatMap { region_id, sample_ids, depth_files ->
+                def files = depth_files instanceof List
+                    ? depth_files
+                    : [depth_files]
+
+                sample_ids.collect { sample_id ->
+                    def expected_name = "${region_id}_${sample_id}.depths.bed.gz"
+                    def depth_file = files.find { it.name == expected_name }
+
+                    if (!depth_file) {
+                        throw new IllegalStateException(
+                            "Missing depth file for sample '${sample_id}', " +
+                            "region '${region_id}': expected '${expected_name}'"
+                        )
+                    }
+
+                    tuple(sample_id, depth_file)
+                }
+            }
             .groupTuple(by: 0)
         
         // Calculate depth and sex assignments for downsampled data
