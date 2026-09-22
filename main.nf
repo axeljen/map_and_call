@@ -30,7 +30,6 @@ include { bcftools_view_region } from './modules/bcftools/bcftools_view_region'
 include { parse_summary_stats } from './modules/summary_stats/parse_summary_stats'
 include { combine_summary_tables } from './modules/summary_stats/combine_summary_files'
 
-params.mode = params.mode ?: 'map_and_call'
 
 // ═══════════════════════════════════════════════════════════════════════════════
 //                      UTILITY FUNCTIONS & HELPERS
@@ -193,6 +192,16 @@ def calculate_depth_and_sex(depth_avg_ch, sex_limited_list, non_sex_limited_list
 }
 
 /*
+ * Coerce a boolean-ish param to a real Boolean. Nextflow 26 passes bare `--flag`
+ * CLI options through as the string "true" rather than a Boolean, which the
+ * strict-typed `output { enabled ... }` DSL below rejects. Nextflow 25 already
+ * yields a real Boolean, so this is a no-op there.
+ */
+def asBoolean(value) {
+    return value.toString().toBoolean()
+}
+
+/*
  * Get filter expressions for variant calling based on variant caller type
  * Returns map with snp_filter_expr and indel_filter_expr
  */
@@ -257,6 +266,15 @@ workflow {
     // ═══════════════════════════════════════════════════════════════════════════════
     //                     SETUP: Configuration and Input Parsing
     // ═══════════════════════════════════════════════════════════════════════════════
+
+    // Coerce numeric params since bare CLI values arrive as Strings on Nextflow 26+
+    // (these are used in Groovy arithmetic/comparisons downstream, not just string interpolation)
+    params.min_depth = WorkflowUtils.parseNumericParam(params.min_depth)
+    params.max_depth = WorkflowUtils.parseNumericParam(params.max_depth)
+    params.downsample_bams_coverage = WorkflowUtils.parseNumericParam(params.downsample_bams_coverage)
+    params.sex_assignment_lower_threshold = WorkflowUtils.parseNumericParam(params.sex_assignment_lower_threshold)
+    params.sex_assignment_upper_threshold = WorkflowUtils.parseNumericParam(params.sex_assignment_upper_threshold)
+    params.short_reads_threshold = WorkflowUtils.parseNumericParam(params.short_reads_threshold)
 
     // Setup sex chromosome system based on user parameters
     sex_config = setup_sex_chromosome_system()
@@ -729,15 +747,15 @@ output {
         path "00_input_data/00_reference_genome"
     }
     clean_reads {
-        enabled params.store_cleanreads
+        enabled asBoolean(params.store_cleanreads)
         path "00_input_data/01_clean_reads"
     }
     fastqc_raw {
-        enabled params.store_sample_fastqc
+        enabled asBoolean(params.store_sample_fastqc)
         path "01_reports/00_fastqc/00_raw_reads/sample_fastqc_reports"
     }
     fastqc_clean {
-        enabled params.store_sample_fastqc
+        enabled asBoolean(params.store_sample_fastqc)
         path "01_reports/00_fastqc/01_clean_reads/sample_fastqc_reports"
     }
     multiqc_rawreads_report {
@@ -750,85 +768,86 @@ output {
         path "01_reports/01_qualimap/01_qualimap_post_markdups"
     }
     qualimap_downsampled_reports {
-        enabled params.downsample_bams
+        enabled asBoolean(params.downsample_bams)
         path "01_reports/01_qualimap/02_qualimap_downsampled"
     }
     bamfiles {
-        enabled !params.store_crams
+        enabled !asBoolean(params.store_crams)
         path "02_bamfiles"
     }
     downsampled_bamfiles {
-        enabled params.downsample_bams && !params.store_crams
+        enabled asBoolean(params.downsample_bams) && !asBoolean(params.store_crams)
         path "02_bamfiles/downsampled"
     }
     mapping_depths {
         path "02_bamfiles/mapping_depths"
     }
     bam_metrics {
-        enabled params.postmapping_dedup
+        enabled asBoolean(params.postmapping_dedup)
         path "02_bamfiles/dedup_metrics"
     }
     cramfiles {
-        enabled params.store_crams
+        enabled asBoolean(params.store_crams)
         path "02_bamfiles"
     }
     downsampled_cramfiles {
-        enabled params.downsample_bams && params.store_crams
+        enabled asBoolean(params.downsample_bams) && asBoolean(params.store_crams)
         path "02_bamfiles/downsampled"
     }
     raw_vcf {
         path "03_genotypes/00_raw_variants"
-        enabled params.store_raw_vcf && !params.skip_variant_calling
+        enabled asBoolean(params.store_raw_vcf) && !asBoolean(params.skip_variant_calling)
     }
     raw_variant_stats {
         path "01_reports/02_variantstats/00_raw_variants"
-        enabled !params.skip_variant_calling
+        enabled !asBoolean(params.skip_variant_calling)
     }
     raw_vcf_stats_plot {
         path "01_reports/02_variantstats/00_raw_variants"
-        enabled !params.skip_variant_calling
+        enabled !asBoolean(params.skip_variant_calling)
     }
     filtered_snps_stats {
         path "01_reports/02_variantstats/01_filtered_snps"
-        enabled !params.skip_variant_calling
+        enabled !asBoolean(params.skip_variant_calling)
     }
     filtered_snps_stats_plot {
        path "01_reports/02_variantstats/01_filtered_snps"
-        enabled !params.skip_variant_calling
+        enabled !asBoolean(params.skip_variant_calling)
     }
     filtered_indel_stats {
         path "01_reports/02_variantstats/02_filtered_indels"
-        enabled !params.skip_variant_calling
+        enabled !asBoolean(params.skip_variant_calling)
     }
     filtered_indel_stats_plot {
         path "01_reports/02_variantstats/02_filtered_indels"
-        enabled !params.skip_variant_calling
+        enabled !asBoolean(params.skip_variant_calling)
     }
     callable_regions {
         path "03_genotypes/02_maskfiles"
-        enabled !params.skip_variant_calling
+        enabled !asBoolean(params.skip_variant_calling)
     }
     snpable_regions {
         path "03_genotypes/02_maskfiles"
-        enabled !params.skip_variant_calling
+        enabled !asBoolean(params.skip_variant_calling)
     }
     invariant_calls {
         path "03_genotypes/02_maskfiles"
-        enabled !params.skip_variant_calling
+        enabled !asBoolean(params.skip_variant_calling)
     }
     filtered_snps {
         path "03_genotypes/01_filtered_variants"
-        enabled !params.skip_variant_calling
+        enabled !asBoolean(params.skip_variant_calling)
     }
     filtered_indels {
         path "03_genotypes/01_filtered_variants"
-        enabled !params.skip_variant_calling
+        enabled !asBoolean(params.skip_variant_calling)
     }
     summary_statistics {
         path "01_reports"
-        enabled !params.skip_variant_calling
+        enabled !asBoolean(params.skip_variant_calling)
     }
     damage_profiles {
         path "01_reports/03_damage_profiles"
     }
 }
+
