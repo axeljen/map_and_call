@@ -99,6 +99,10 @@ workflow {
     
     println "Running PREPROCESS_AND_MAP workflow: preprocessing, mapping, and BAM processing (no variant calling)"
     
+    // Coerce depth thresholds (fraction vs. absolute depth) since bare CLI values arrive as Strings
+    params.min_depth = WorkflowUtils.parseNumericParam(params.min_depth)
+    params.max_depth = WorkflowUtils.parseNumericParam(params.max_depth)
+    
     // Setup sex chromosome system
     sex_config = setup_sex_chromosome_system()
     def sex_chrom_system = sex_config.sex_chrom_system

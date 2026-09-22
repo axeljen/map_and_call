@@ -185,6 +185,14 @@ workflow {
         error "Unsupported variant caller specified: ${params.variant_caller}. Must be one of gatk_joint, gatk_haplotypecaller, freebayes or bcftools."
     }
     
+    // Coerce numeric params since bare CLI values arrive as Strings on Nextflow 26+
+    // (these are used in Groovy arithmetic/comparisons downstream, not just string interpolation)
+    params.min_depth = WorkflowUtils.parseNumericParam(params.min_depth)
+    params.max_depth = WorkflowUtils.parseNumericParam(params.max_depth)
+    params.downsample_bams_coverage = WorkflowUtils.parseNumericParam(params.downsample_bams_coverage)
+    params.sex_assignment_lower_threshold = WorkflowUtils.parseNumericParam(params.sex_assignment_lower_threshold)
+    params.sex_assignment_upper_threshold = WorkflowUtils.parseNumericParam(params.sex_assignment_upper_threshold)
+    
     // Setup sex chromosome system
     sex_config = setup_sex_chromosome_system()
     def sex_chrom_system = sex_config.sex_chrom_system
