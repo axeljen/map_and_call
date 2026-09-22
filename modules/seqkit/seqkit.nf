@@ -17,7 +17,8 @@ process split_fq_by_length {
     tuple val(sample_id), val(library), val(datatype), path("${sample_id}_${library}_longreads.fq.gz"), emit: longreads
 
     script:
-    def minlen_longreads = params.short_reads_threshold + 1
+    // .toInteger() guards against a bare CLI string value arriving here before normalization
+    def minlen_longreads = params.short_reads_threshold.toString().toInteger() + 1
     """
     # extract short reads
     seqkit seq -M ${params.short_reads_threshold} -o ${sample_id}_${library}_shortreads.fq.gz ${reads}
