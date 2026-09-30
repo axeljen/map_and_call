@@ -10,7 +10,7 @@
 #SBATCH -e ./logs/%x-%j.error
 
 # Load nextflow and modules
-ml PDC nextflow miniconda3
+ml PDC nextflow singularity
 
 # Path to input file with sample and read information, see readme for details.
 INPUT_CSV='/path/to/input.csv'
@@ -51,6 +51,7 @@ nextflow run main.nf \
     --outdir "$OUTDIR" \
     --slurm_account "$SLURM_JOB_ACCOUNT" \
     --variant_caller "$VARIANT_CALLER" \
+    --with_singularity \
     --chunk_size "$CHUNK_SIZE"
 
 ##### Some additional, potentially useful flags:
