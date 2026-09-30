@@ -392,9 +392,11 @@ workflow PROCESS_BAMS {
         
         qualimap_downsampled_reports = qualimap_downsampled.out.qualimap_report
         sample_depths_for_filters = sample_depths_downsampled
+        sample_depth_beds_for_filters = parse_region_depths_downsampled.out.sample_depth_beds
     } else {
         qualimap_downsampled_reports = channel.empty()
         sample_depths_for_filters = sample_depths
+        sample_depth_beds_for_filters = parse_region_depths.out.sample_depth_beds
     }
 
     // ─────────────────────────────────────────────────────────────────────────────
@@ -427,8 +429,8 @@ workflow PROCESS_BAMS {
             }
             tuple(sample_id, min_dp, max_dp, sex_assignment)
         }
-        // Add the sample bedfile to this
-        .combine(parse_region_depths.out.sample_depth_beds, by: 0)
+        // Add the sample bedfile to this (downsampled depths if downsampling is enabled)
+        .combine(sample_depth_beds_for_filters, by: 0)
 
     // Prepare input for callable_regions by adding scaffold lists and reference
     callable_regions_input = depth_cutoffs
