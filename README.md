@@ -361,37 +361,37 @@ These are internal defaults used when custom filter expressions are not provided
 
   These are toggled indirectly by the corresponding `--skip_*` flags.
 
-# Running different parts of the pipeline
+## Running different parts of the pipeline
 
 The `--mode` parameter controls the start and end point of the pipeline,
 allowing you to run only specific parts of it. By default, mode is set to
 `map_and_call`, and will run the entire mapping and variant calling from
 beginning to end. Other options are:
 
-`--mode read-qc`
+### `--mode read-qc`
 
 This will run only the read quality control part of the pipeline. Takes exactly
 the same input as the full `map_and_call` mode.
 
-`--mode preprocess_reads`
+### `--mode preprocess_reads`
 
 This will run only the read preprocessing part of the pipeline, including
 trimming and deduplication of reads. Takes exactly the same input as the full
 `map_and_call` mode.
 
-`--mode map_only`
+### `--mode map_only`
 
 This will run only the read mapping part of the pipeline, producing BAM/CRAM
 files without variant calling. Takes exactly the same input as the full
 `map_and_call` mode.
 
-`--mode call_variants`
+### `--mode call_variants`
 
 This will run only the variant calling part of the pipeline, starting from
 existing BAM/CRAM files. With this switched on, the input is simply a list of
 bam files, one per line, provided via the `--bamfiles` parameter.
 
-`--mode filter_variants`
+### `--mode filter_variants`
 
 This will run only the variant filtering part of the pipeline, starting from
 raw VCF files. Input is a single vcf file, provided via the `--vcf` parameter,
