@@ -32,6 +32,22 @@ class WorkflowUtils {
     }
 
     /*
+     * Coerce a numeric param to its intended type: values containing a '.' are parsed as
+     * BigDecimal, everything else as Integer. Needed because bare CLI values always arrive
+     * as Strings on Nextflow 26+, and Groovy silently does the wrong thing with a numeric
+     * String (e.g. "70" + 1 == "701", string concatenation, not addition) or throws
+     * (e.g. "3.5" / 10.0 or 0.5 < "0.25"). Also used for min_depth/max_depth, where
+     * downstream code distinguishes an absolute depth from a fraction via `instanceof Integer`.
+     */
+    static def parseNumericParam(value) {
+        if (value == null) {
+            return value
+        }
+        def str = value.toString()
+        return str.contains('.') ? str.toBigDecimal() : str.toInteger()
+    }
+
+    /*
      * Setup sex chromosome system and identify sex-linked contigs
      * Returns map with: sex_chrom_system, sex_linked_list, sex_limited_list, non_sex_limited_list
      */

@@ -13,7 +13,7 @@ process extract_sample_from_bam {
     script:
     """
     # Extract sample ID from BAM read group (SM tag)
-    samtools view -H ${bam} | grep '^@RG' | head -n 1 | sed 's/.*SM:\\([^\\t]*\\).*/\\1/' | tr -d '\\n' > ${bam.baseName}.sample_id.txt
+    samtools view -H ${bam} | awk -F '\\t' '\$1 == "@RG" { for (i = 1; i <= NF; i++) if (\$i ~ /^SM:/) { split(\$i, tag, ":"); print tag[2]; exit } }' > ${bam.baseName}.sample_id.txt
     """
 
     stub:

@@ -66,18 +66,11 @@ workflow VARIANT_CALLING {
     // ─────────────────────────────────────────────────────────────────────────────
     // Prepare reference bundle with all index files
     // ─────────────────────────────────────────────────────────────────────────────
-    ref_index_ch = bwa_index
-        .map { _reference, index_files -> index_files }
     ref_bundle_ch = ch_reference
         .combine(reference_fai)
         .combine(reference_gzi)
-        .combine(ref_index_ch)
-        .map { row ->
-            def reference = row[0]
-            def fai = row[1]
-            def gzi = row[2]
-            def bwa_indices = row[3..-1]
-            tuple(reference, [fai, gzi] + bwa_indices)
+        .map { reference, fai, gzi ->
+            tuple(reference, [fai, gzi])
         }
 
     varcall_ch = bams_for_calling
@@ -90,15 +83,11 @@ workflow VARIANT_CALLING {
             tuple(crams, crais)
         }
         .combine(refintervals_ch)
-       //.groupTuple(by: [2,3])
-         // Broadcast reference bundle to all variant calling tasks
         .combine(ref_bundle_ch)
         .map { bams, bais, region_id, regions, ref_genome, ref_indices ->
             tuple(bams, bais, ref_genome, ref_indices, region_id, regions)
         }
-        // .view { bams, bais, ref_genome, ref_indices, region_id, regions ->
-        //     println "Prepared variant calling input for region ${region_id} with reference ${ref_genome} and BAMs: ${bams.join(', ')}"
-        // }
+
 
 
     // ─────────────────────────────────────────────────────────────────────────────
@@ -179,7 +168,6 @@ workflow VARIANT_CALLING {
                 .mix(raw_vcfs)
                 .filter { region_id, _vcf, _idx -> region_id != 'variant_calling_finished' }
                 .map { _region_id, vcf, _idx -> vcf }
-                .view { vcfs -> "Deleting intermediate region VCFs after concatenation: ${vcfs}" }
             // cleanup_vcfs(vcfs_to_clear)
             //     .deleted_files
             //     .view { vcfs -> "Deleted intermediate region VCFs after concatenation: ${vcfs}" } 

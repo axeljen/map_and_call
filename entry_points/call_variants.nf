@@ -185,6 +185,14 @@ workflow {
         error "Unsupported variant caller specified: ${params.variant_caller}. Must be one of gatk_joint, gatk_haplotypecaller, freebayes or bcftools."
     }
     
+    // Coerce numeric params since bare CLI values arrive as Strings on Nextflow 26+
+    // (these are used in Groovy arithmetic/comparisons downstream, not just string interpolation)
+    params.min_depth = WorkflowUtils.parseNumericParam(params.min_depth)
+    params.max_depth = WorkflowUtils.parseNumericParam(params.max_depth)
+    params.downsample_bams_coverage = WorkflowUtils.parseNumericParam(params.downsample_bams_coverage)
+    params.sex_assignment_lower_threshold = WorkflowUtils.parseNumericParam(params.sex_assignment_lower_threshold)
+    params.sex_assignment_upper_threshold = WorkflowUtils.parseNumericParam(params.sex_assignment_upper_threshold)
+    
     // Setup sex chromosome system
     sex_config = setup_sex_chromosome_system()
     def sex_chrom_system = sex_config.sex_chrom_system
@@ -240,8 +248,39 @@ workflow {
     // ═══════════════════════════════════════════════════════════════════════════════
     
     // Calculate depth per region
-    region_depths = samtools_dp(bams_with_samples
-        .combine(INDEX_REFERENCE.out.refintervals))
+    dp_input_ch = bams_with_samples
+        .combine(INDEX_REFERENCE.out.refintervals)
+        .map { sample_id, cram, crai, region_id, regions ->
+            tuple(region_id, regions, sample_id, cram, crai)
+        }
+        .groupTuple(by: [0, 1])
+        .map { region_id, regions, sample_ids, crams, crais ->
+            def zipped = [sample_ids, crams, crais].transpose()
+                .sort { a, b -> a[0] <=> b[0] }
+            def (sorted_sample_ids, sorted_crams, sorted_crais) = zipped.transpose()
+            tuple(region_id, regions, sorted_sample_ids, sorted_crams, sorted_crais)
+        }
+
+    region_depths = samtools_dp(dp_input_ch).region_dp
+        .flatMap { region_id, sample_ids, depth_files ->
+            def files = depth_files instanceof List
+                ? depth_files
+                : [depth_files]
+
+            sample_ids.collect { sample_id ->
+                def expected_name = "${region_id}_${sample_id}.depths.bed.gz"
+                def depth_file = files.find { it.name == expected_name }
+
+                if (!depth_file) {
+                    throw new IllegalStateException(
+                        "Missing depth file for sample '${sample_id}', " +
+                        "region '${region_id}': expected '${expected_name}'"
+                    )
+                }
+
+                tuple(sample_id, depth_file)
+            }
+        }
         .groupTuple(by: 0)
     
     // Parse region depths and calculate sample depths
@@ -352,7 +391,8 @@ workflow {
         params.variant_caller,
         params.popfile,
         sample_stats,
-        params.store_raw_vcf
+        params.store_raw_vcf,
+        channel.empty()
     )
     
     // ═══════════════════════════════════════════════════════════════════════════════

@@ -140,8 +140,6 @@ workflow PREPROCESS_HISTORICAL {
             .map { fields -> tuple(fields[0], fields[1], fields[2], fields[3..-1].flatten()) }
 
         cleanup_reads(cleaning_ch)
-            .deleted_files
-            .view()
     }
 
 

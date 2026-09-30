@@ -15,19 +15,19 @@ process parse_summary_stats {
     """
     
     # total number of callable sites
-    callable_sites=\$(awk '{sum += \$3 - \$2} END {print sum}' ${callable})
+    callable_sites=\$(zcat -f ${callable} | awk '{sum += \$3 - \$2} END {print sum+0}')
     # fetch stats from snpstats
     read -r num_records num_homref num_het num_homalt num_missing < <(
         awk -v sample="${sample_id}" '\$1==sample {print \$2, \$3, \$4, \$5, \$6; exit}' *_snps_sample_stats.tsv
         )
     # number of homozygous reference calls outside of the vcf file
-    homref_invariants=\$(awk '{sum += \$3 - \$2} END {print sum}' ${invariants})
+    homref_invariants=\$(zcat -f ${invariants} | awk '{sum += \$3 - \$2} END {print sum+0}')
 
     # total number of homozygous calls
     total_hom=\$((num_homref + homref_invariants + num_homalt))
 
     # heterozygosity as snps / snps + total_hom
-    heterozygosity=\$(echo "scale=6; \$num_het / (\$num_het + \$total_hom)" | bc)
+    heterozygosity=\$(awk -v het="\$num_het" -v hom="\$total_hom" 'BEGIN { d = het + hom; if (d > 0) printf "%.6f", het / d; else print "NA" }')
 
     # pending the sex chromosome system and sex assignment, tidy the labels to male/female
     if [[ "${sex_assignment}" == "hemizygous" && ${sex_chromosome_system} == "XY" ]]; then

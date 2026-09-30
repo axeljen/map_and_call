@@ -30,3 +30,41 @@ process combine_bedfiles {
     echo "0" > total_sites.txt
     """
 }
+
+process concatenate_masks {
+    scratch params.use_scratch
+    tag "concatenate_masks"
+    label 'thin_short'
+    conda "${moduleDir}/environment.yml"
+
+    input:
+    tuple val(sample_id), path(homref_masks), path(total_masks), path(snp_masks)
+
+    output:
+    tuple val(sample_id), path("${sample_id}_homref_invariants.bed.gz"), emit: homref_mask
+    tuple val(sample_id), path("${sample_id}_mappability_mask.bed.gz"), emit: mappability_mask
+    tuple val(sample_id), path("${sample_id}_snp_mask.bed.gz"), emit: snp_mask
+
+    script:
+    """
+    for maskfile in ${homref_masks}; do
+        cat \${maskfile} >> ${sample_id}_homref_invariants.bed.gz
+    done
+
+    for maskfile in ${total_masks}; do
+        cat \${maskfile} >> ${sample_id}_mappability_mask.bed.gz
+    done
+
+    for maskfile in ${snp_masks}; do
+        cat \${maskfile} >> ${sample_id}_snp_mask.bed.gz
+    done
+
+    """
+
+    stub:
+    """
+    touch ${sample_id}_homref_invariants.bed
+    touch ${sample_id}_mappability_mask.bed
+    touch ${sample_id}_snp_mask.bed
+    """
+}
