@@ -3,9 +3,10 @@
 1. [Description](#description)
 2. [Quick start on Dardel (TL;DR)](#quick-start-on-dardel.pdc.kth.se)
 3. [Input](#input)
-3. [Output](#output)
-4. [Working example](#working-example)
-5. [Workflow parameters](#workflow-parameters)
+4. [Output](#output)
+5. [Working example](#working-example)
+6. [Workflow parameters](#workflow-parameters)
+7. [Running different parts of the pipeline](#running-different-parts-of-the-pipeline)
 
 ## Description
 
@@ -175,18 +176,16 @@ works as expected.
 
 See also <https://github.com/axeljen/mapcall_tutorial> for more details.
 
-To follow the working example, download the dataset:
+To follow the working example, download the dataset (folder
+`example_data_mapcall`, 250M):
 
 ```bash
-  # download and unarchive the example data
-  curl -L https://osf.io/download/d8gqw/ -o example_data.tar
-  tar -xf example_data.tar
-  rm example_data.tar
+curl -L https://osf.io/download/d8gqw/ | tar xvf -
 ```
 
-Now `example_data` contains everything you need for a complete run from reads
-to variants, which should take ~10-20 minutes. See the included readme file for
-instructions.
+Now `example_data_mapcall` contains everything you need for a complete run from
+reads to variants, which should take ~10-20 minutes. See the included
+`README.md` file for instructions.
 
 ## Workflow parameters
 
@@ -361,29 +360,41 @@ These are internal defaults used when custom filter expressions are not provided
   - `--postmapping_dedup`
 
   These are toggled indirectly by the corresponding `--skip_*` flags.
-Now `example_data` contains everything you need for a complete run from reads to variants, which should take ~10-20 minutes. See the included readme file for instructions.
 
 # Running different parts of the pipeline
 
-The --mode parameter controls the start and end point of the pipeline, allowing you to run only specific parts of it. By default, mode is set to 'map_and_call', and will run the entire mapping and variant calling from beginning to end. Other options are:
+The `--mode` parameter controls the start and end point of the pipeline,
+allowing you to run only specific parts of it. By default, mode is set to
+`map_and_call`, and will run the entire mapping and variant calling from
+beginning to end. Other options are:
 
-  --mode read-qc
+`--mode read-qc`
 
-This will run only the read quality control part of the pipeline. Takes exactly the same input as the full 'map_and_call' mode.
+This will run only the read quality control part of the pipeline. Takes exactly
+the same input as the full `map_and_call` mode.
 
-  --mode preprocess_reads
+`--mode preprocess_reads`
 
-This will run only the read preprocessing part of the pipeline, including trimming and deduplication of reads. Takes exactly the same input as the full 'map_and_call' mode.
+This will run only the read preprocessing part of the pipeline, including
+trimming and deduplication of reads. Takes exactly the same input as the full
+`map_and_call` mode.
 
-  --mode map_only
+`--mode map_only`
 
-This will run only the read mapping part of the pipeline, producing BAM/CRAM files without variant calling. Takes exactly the same input as the full 'map_and_call' mode.
+This will run only the read mapping part of the pipeline, producing BAM/CRAM
+files without variant calling. Takes exactly the same input as the full
+`map_and_call` mode.
 
-  --mode call_variants
+`--mode call_variants`
 
-This will run only the variant calling part of the pipeline, starting from existing BAM/CRAM files. With this switched on, the input is simply a list of bam files, one per line, provided via the `--bamfiles` parameter.
+This will run only the variant calling part of the pipeline, starting from
+existing BAM/CRAM files. With this switched on, the input is simply a list of
+bam files, one per line, provided via the `--bamfiles` parameter.
 
-  --mode filter_variants
+`--mode filter_variants`
 
-This will run only the variant filtering part of the pipeline, starting from raw VCF files. Input is a single vcf file, provided via the `--vcf` parameter, together with a list of bamfiles used to estimate coverage depths for filtering, provided via the `--bamfiles` parameter.
+This will run only the variant filtering part of the pipeline, starting from
+raw VCF files. Input is a single vcf file, provided via the `--vcf` parameter,
+together with a list of bamfiles used to estimate coverage depths for
+filtering, provided via the `--bamfiles` parameter.
 
