@@ -3,9 +3,10 @@
 1. [Description](#description)
 2. [Quick start on Dardel (TL;DR)](#quick-start-on-dardel.pdc.kth.se)
 3. [Input](#input)
-3. [Output](#output)
-4. [Working example](#working-example)
-5. [Workflow parameters](#workflow-parameters)
+4. [Output](#output)
+5. [Working example](#working-example)
+6. [Workflow parameters](#workflow-parameters)
+7. [Storage considerations and nf-boost](#storage-considerations-and-nf-boost)
 
 ## Description
 
@@ -387,3 +388,11 @@ This will run only the variant calling part of the pipeline, starting from exist
 
 This will run only the variant filtering part of the pipeline, starting from raw VCF files. Input is a single vcf file, provided via the `--vcf` parameter, together with a list of bamfiles used to estimate coverage depths for filtering, provided via the `--bamfiles` parameter.
 
+
+# Storage considerations and nf-boost
+
+The pipeline has a tendency to generate very large, intermediate files, that are staged in the work directory. If you are working on a system with limited storage availability, I recommend that you try running the pipeline with the [nf-boost cleanup plugin](https://github.com/bentsherman/nf-boost) enabled. This plugin progressively deletes intermediate files as they are not needed by downstream processes, and dramatically reduces storage usage. Below is a comparison of the size of the work directory over the course of the pipeline between one default run and one run with nf-boost enabled. The input data in this case was a small simulated dataset, totalling to ~2.5 Gb. Without nf-boost, the work directory grows to ~10 Gb, i.e., four times the size of the input data, whereas the run with nf-boost peaks at around 180 % of the input data size, and then stabilizes at ~60% of the input data size.
+
+![Storage usage comparison](./figures/work_dir_usage.png)
+
+The big caveat of enabling nf-boost is that this disables the ability to use the -resume function, so if your pipeline fails halfway through, you need to start from scratch (or, if some steps succeeded you might be able to restart the pipeline from a different step using the --mode parameter). Nevertheless, for shared storage systems etc., this function can be very useful and it might be worth sacrificing resumability for reduced storage usage.
