@@ -13,6 +13,7 @@ process mpileup{
     script:
     def regions_list = regions.join(',')
     def bamstring = cram.join(' ')
+    def variants_only = params.output_invariant_sites ? "" : "-v"
     """
     # Create popfile from the Groovy-generated string
     echo -e "${pops.join('\n')}" | sed 's/=/\t/' > bcftools_popfile.txt
@@ -23,7 +24,7 @@ process mpileup{
         -Ou \
         -a FORMAT/DP,FORMAT/AD \
         ${bamstring} | \
-    bcftools call -m -v -G bcftools_popfile.txt --threads ${task.cpus} -Oz -o bcftools.region-${region_id}.vcf.gz -
+    bcftools call -m ${variants_only} -G bcftools_popfile.txt --threads ${task.cpus} -Oz -o bcftools.region-${region_id}.vcf.gz -
     bcftools index bcftools.region-${region_id}.vcf.gz
     """
 

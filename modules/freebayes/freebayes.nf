@@ -15,6 +15,7 @@ process freebayes{
     script:
     def regions_list = regions.join(' ')
     def bamlist = cram.join(' ')
+    def report_monomorphic = params.output_invariant_sites ? "--report-monomorphic" : ""
     """
     # Create popfile from the Groovy-generated string
     
@@ -41,7 +42,7 @@ process freebayes{
         reference_file=${reference}
     fi
 
-    freebayes -f \${reference_file} -t freebayes_targets.bed --populations freebayes_popfile.txt --min-mapping-quality ${params.min_mapqual} --min-base-quality ${params.min_basequal} --ploidy ${params.ploidy} ${bamlist} | bgzip - > freebayes.region-${region_id}.vcf.gz
+    freebayes -f \${reference_file} -t freebayes_targets.bed --populations freebayes_popfile.txt --min-mapping-quality ${params.min_mapqual} --min-base-quality ${params.min_basequal} --ploidy ${params.ploidy} ${report_monomorphic} ${bamlist} | bgzip - > freebayes.region-${region_id}.vcf.gz
     bcftools index freebayes.region-${region_id}.vcf.gz
     """
 

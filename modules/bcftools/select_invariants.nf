@@ -1,4 +1,4 @@
-process select_invariant {
+process select_invariants {
     scratch params.use_scratch
     tag "select_invariant"
     label 'thin_short'

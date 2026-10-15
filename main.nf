@@ -721,6 +721,7 @@ workflow {
     raw_vcf = run_variant_calling ? VARIANT_CALLING.out.raw_vcf : channel.empty()
     filtered_snps = run_filtering ? VARIANT_FILTERS.out.filtered_snps : channel.empty()
     filtered_indels = run_filtering ? VARIANT_FILTERS.out.filtered_indels : channel.empty()
+    filtered_invariants = run_filtering ? VARIANT_FILTERS.out.filtered_invariants : channel.empty()
 
     // Callable regions
     callable_regions = run_filtering ? VARIANT_FILTERS.out.callable_regions_bed : channel.empty()
@@ -841,6 +842,10 @@ output {
     filtered_indels {
         path "03_genotypes/01_filtered_variants"
         enabled !asBoolean(params.skip_variant_calling)
+    }
+    filtered_invariants {
+        path "03_genotypes/01_filtered_variants"
+        enabled asBoolean(params.output_invariant_sites) && !asBoolean(params.skip_variant_calling)
     }
     summary_statistics {
         path "01_reports"

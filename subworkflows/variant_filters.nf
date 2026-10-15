@@ -12,10 +12,12 @@
 include { bcftools_norm } from '../modules/bcftools/bcftools_norm'
 include { select_snps } from '../modules/bcftools/select_snps'
 include { select_indels } from '../modules/bcftools/select_indels'
+include { select_invariants } from '../modules/bcftools/select_invariants'
 include { bcftools_filter as bcftools_filter_snps } from '../modules/bcftools/bcftools_filter'
 include { bcftools_filter as bcftools_filter_indels } from '../modules/bcftools/bcftools_filter'
 include { callability_filter as callability_filter_snps } from '../modules/bedtools/callability_filter'
 include { callability_filter as callability_filter_indels } from '../modules/bedtools/callability_filter'
+include { callability_filter as callability_filter_invariants } from '../modules/bedtools/callability_filter'
 include { ab_filter as ab_filter_snps } from '../modules/custom_variant_filters/ab_filter'
 include { ab_filter as ab_filter_indels } from '../modules/custom_variant_filters/ab_filter'
 include { ab_dp_filter as ab_dp_filter_snps } from '../modules/custom_variant_filters/ab_dp_filter'
@@ -26,6 +28,7 @@ include { bcftools_filter_fmiss_maf as bcftools_filter_fmiss_maf_snps } from '..
 include { bcftools_filter_fmiss_maf as bcftools_filter_fmiss_maf_indels } from '../modules/bcftools/bcftools_filter_fmiss_maf'
 include { bcftools_concat as bcftools_concat_snps } from '../modules/bcftools/bcftools_concat'
 include { bcftools_concat as bcftools_concat_indels } from '../modules/bcftools/bcftools_concat'
+include { bcftools_concat as bcftools_concat_invariants } from '../modules/bcftools/bcftools_concat'
 include { vcf_stats as filtered_snp_stats } from '../modules/variant_stats/vcf_stats_process'
 include { vcf_stats as filtered_indel_stats } from '../modules/variant_stats/vcf_stats_process'
 include { combine_stats as combine_filtered_snps_stats } from '../modules/variant_stats/combine_stats'
@@ -133,6 +136,12 @@ workflow VARIANT_FILTERS {
     // ─────────────────────────────────────────────────────────────────────────────
     select_snps(bcftools_norm.out.vcf)
     select_indels(bcftools_norm.out.vcf)
+    if (params.output_invariant_sites) {
+        invars = select_invariants(bcftools_norm.out.vcf)
+    }
+    else {
+        invars = channel.empty()
+    }
 
     // ─────────────────────────────────────────────────────────────────────────────
     // Get filter expressions based on variant caller type
@@ -159,11 +168,19 @@ workflow VARIANT_FILTERS {
         .combine(bcftools_filter_snps.out.vcf, by: 0)
         .combine(callable_regions)
         .groupTuple(by: [0,1,2,3])
-
-    refintervals_ch
-        .combine(bcftools_filter_indels.out.vcf, by: 0)
-        .combine(callable_regions)
-        .groupTuple(by: [0,1,2,3])
+            .map { region_id, regions, vcfs, csis, samples, bedfiles ->
+            def zipped = [samples, bedfiles].transpose()
+                .sort { a, b -> a[0] <=> b[0] }
+            def (sorted_samples, sorted_bedfiles) = zipped.transpose()
+            tuple(region_id, regions, vcfs, csis, sorted_samples, sorted_bedfiles, 'snps')
+        }
+        .view {
+            "Selected and combined SNP regions: ${it}"
+        }
+    // refintervals_ch
+    //     .combine(bcftools_filter_indels.out.vcf, by: 0)
+    //     .combine(callable_regions)
+    //     .groupTuple(by: [0,1,2,3])
 
     // run through callability filter
     callability_filter_snps(
@@ -191,7 +208,25 @@ workflow VARIANT_FILTERS {
             tuple(region_id, regions, vcfs, csis, sorted_samples, sorted_bedfiles, 'indels')
         }
         )
-    callability_filter_snps.out.vcf
+
+    if (params.output_invariant_sites) {
+        filtered_invariants = callability_filter_invariants(
+            refintervals_ch
+                .combine(invars, by: 0)
+                .combine(callable_regions)
+                .groupTuple(by: [0,1,2,3])
+                .map { region_id, regions, vcfs, csis, samples, bedfiles ->
+                    def zipped = [samples, bedfiles].transpose()
+                        .sort { a, b -> a[0] <=> b[0] }
+                    def (sorted_samples, sorted_bedfiles) = zipped.transpose()
+                    tuple(region_id, regions, vcfs, csis, sorted_samples, sorted_bedfiles, 'invariants')
+                }
+        )
+    }
+    else {
+        filtered_invariants = channel.empty()
+    }
+
     // push through allele balance filter
     ab_filter_snps(
         callability_filter_snps.out.vcf
@@ -201,35 +236,6 @@ workflow VARIANT_FILTERS {
         callability_filter_indels.out.vcf
             // .map { region_id, sample, vcf, csi -> tuple(region_id, sample, vcf, csi, 'indels') }
             )
-
-    // // ─────────────────────────────────────────────────────────────────────────────
-    // // Merge samples together per region
-    // // ─────────────────────────────────────────────────────────────────────────────
-
-    
-    // bcftools_merge_snps(ab_filter_snps.out.vcf
-    //     .groupTuple(by: 0)
-    //     .map {region_id, sample_ids, sample_vcfs, idxs -> tuple(region_id, sample_ids, sample_vcfs, idxs, 'snps_abfiltered')}
-    //     // ensure that sample vcf files are always sorted in the same order so that we can concatenate later on
-    //     .map { region_id, sample_ids, sample_vcfs, idxs, category ->
-    //         def zipped = [sample_ids, sample_vcfs, idxs].transpose()
-    //             .sort { a, b -> a[0] <=> b[0] } // sort by sample ID
-    //         def (sample_ids_sorted, sample_vcfs_sorted, idxs_sorted) = zipped.transpose()
-    //         tuple(region_id, sample_ids_sorted, sample_vcfs_sorted, idxs_sorted, category)
-    //     }
-    // )
-    // bcftools_merge_indels(ab_filter_indels.out.vcf
-    //     .groupTuple(by: 0)
-    //     .map {region_id, sample_ids, sample_vcfs, idxs -> tuple(region_id, sample_ids, sample_vcfs, idxs, 'indels_abfiltered')}
-    //     // ensure that sample vcf files are always sorted in the same order so that we can concatenate later on
-    //     .map { region_id, sample_ids, sample_vcfs, idxs, category ->
-    //         def zipped = [sample_ids, sample_vcfs, idxs].transpose()
-    //             .sort { a, b -> a[0] <=> b[0] } // sort by sample ID
-    //         def (sample_ids_sorted, sample_vcfs_sorted, idxs_sorted) = zipped.transpose()
-    //         tuple(region_id, sample_ids_sorted, sample_vcfs_sorted, idxs_sorted, category)
-    //     }
-    // )
-    
 
     // // ─────────────────────────────────────────────────────────────────────────────
     // // Last set of popgen filters based on missingness and allele frequency
@@ -269,9 +275,22 @@ workflow VARIANT_FILTERS {
     // // ─────────────────────────────────────────────────────────────────────────────
     sorted_snps = sort_and_extract_vcfs(bcftools_fmiss_maf_filtered_snps.vcf)
     sorted_indels = sort_and_extract_vcfs(bcftools_fmiss_maf_filtered_indels.vcf)
+    if (params.output_invariant_sites) {
+        sorted_invariants = sort_and_extract_vcfs(filtered_invariants.vcf)
+    }
+    else {
+        sorted_invariants = channel.empty()
+    }
 
     bcftools_concat_snps(sorted_snps, 'filtered_snps')
     bcftools_concat_indels(sorted_indels, 'filtered_indels')
+
+    if (params.output_invariant_sites) {
+        concat_invariants = bcftools_concat_invariants(sorted_invariants, 'filtered_invariants')
+    }
+    else {
+        concat_invariants = channel.empty()
+    }
 
     // // ─────────────────────────────────────────────────────────────────────────────
     // // Finalize mask files
@@ -334,6 +353,7 @@ workflow VARIANT_FILTERS {
     emit:
     filtered_snps = bcftools_concat_snps.out.vcf
     filtered_indels = bcftools_concat_indels.out.vcf
+    filtered_invariants = params.output_invariant_sites ? concat_invariants.vcf : channel.empty()
     callable_regions_bed = concatenated_masks.mappability_mask
     snpable_regions_bed = concatenated_masks.snp_mask
     invariant_calls_bed = concatenated_masks.homref_mask
