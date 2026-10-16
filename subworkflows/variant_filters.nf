@@ -164,24 +164,6 @@ workflow VARIANT_FILTERS {
     bcftools_filter_snps(select_snps.out.vcf, filter_expressions.snp_filter_expr, "snps")
     bcftools_filter_indels(select_indels.out.vcf, filter_expressions.indel_filter_expr, "indels")
 
-    refintervals_ch
-        .combine(bcftools_filter_snps.out.vcf, by: 0)
-        .combine(callable_regions)
-        .groupTuple(by: [0,1,2,3])
-            .map { region_id, regions, vcfs, csis, samples, bedfiles ->
-            def zipped = [samples, bedfiles].transpose()
-                .sort { a, b -> a[0] <=> b[0] }
-            def (sorted_samples, sorted_bedfiles) = zipped.transpose()
-            tuple(region_id, regions, vcfs, csis, sorted_samples, sorted_bedfiles, 'snps')
-        }
-        .view {
-            "Selected and combined SNP regions: ${it}"
-        }
-    // refintervals_ch
-    //     .combine(bcftools_filter_indels.out.vcf, by: 0)
-    //     .combine(callable_regions)
-    //     .groupTuple(by: [0,1,2,3])
-
     // run through callability filter
     callability_filter_snps(
         refintervals_ch
@@ -348,7 +330,6 @@ workflow VARIANT_FILTERS {
     concatenated_masks = concatenate_masks(
         masks_by_sample
     )
-
 
     emit:
     filtered_snps = bcftools_concat_snps.out.vcf
