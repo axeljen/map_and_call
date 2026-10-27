@@ -13,11 +13,14 @@ process samtools_markdups {
 
     script:
     """
+    set -euo pipefail
+
     samtools collate -@ ${task.cpus} -O -u ${bam} | \
     samtools fixmate -@ ${task.cpus} -m -u - - | \
     samtools sort -@ ${task.cpus} -u - | \
     samtools markdup -@ ${task.cpus} -r -f ${sample_id}.dedup_metrics.txt -O BAM - ${sample_id}.dedup.bam
     #--use-read-groups 
+    samtools quickcheck -v ${sample_id}.dedup.bam
     samtools index ${sample_id}.dedup.bam
 
     """
