@@ -10,6 +10,7 @@
 // Module imports
 // ─────────────────────────────────────────────────────────────────────────────
 include { bwa_index } from '../modules/bwa/bwa_index'
+include { minibwa_index } from '../modules/minibwa/minibwa_index'
 include { samtools_index } from '../modules/samtools/index_reference'
 include { dochunks } from '../modules/reference_intervals/dochunks'
 
@@ -41,6 +42,7 @@ workflow INDEX_REFERENCE {
     y_scaffolds            // list: Y chromosome scaffold names
     z_scaffolds            // list: Z chromosome scaffold names
     w_scaffolds            // list: W chromosome scaffold names
+    has_historical         // val: true if the input contains historical samples (data_type == '2')
     
     main:
 
@@ -58,48 +60,68 @@ workflow INDEX_REFERENCE {
             for_samtools: ref
         }
 
-    // only index reference if we're actually doing any mapping
-    if (mode == 'map_and_call') {
-    
-    // Branch references based on whether BWA index exists
-    ref_branches = ch_ref_split.for_bwa
-        .map { ref ->
-            def is_indexed = check_bwa_index_exists(ref)
-            tuple(ref, is_indexed)
-        }
-        .branch {
-            indexed: it[1] == true
-            needs_indexing: it[1] == false
-        }
-    
+    // Decide which indexes are needed based on the selected mappers.
+    // BWA index is needed if bwa is used for modern reads, or if there are historical
+    // samples to map (historical reads are always mapped with bwa mem/aln/split).
+    def need_bwa_index     = mode == 'map_and_call' && (
+        params.modern_mapper == 'bwa_mem' ||
+        (has_historical && params.historical_mapper in ['bwa_mem', 'bwa_aln', 'split'])
+    )
+    def need_minibwa_index = mode == 'map_and_call' && params.modern_mapper == 'minibwa'
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // Index reference genome with minibwa (only if minibwa is the modern mapper)
+    // ─────────────────────────────────────────────────────────────────────────────
+    if (need_minibwa_index) {
+        minibwa_index_ch = minibwa_index(ch_ref_split.for_bwa.distinct()).reference
+    }
+    else {
+        minibwa_index_ch = channel.empty()
+    }
+
     // ─────────────────────────────────────────────────────────────────────────────
     // Index reference genome with BWA (only if needed)
     // ─────────────────────────────────────────────────────────────────────────────
-    // For already indexed references, create a channel matching bwa_index output format
-    already_indexed = ref_branches.indexed
-        .map { ref, is_indexed ->
-            def index_files = [
-                file("${ref}.amb"),
-                file("${ref}.ann"),
-                file("${ref}.bwt"),
-                file("${ref}.pac"),
-                file("${ref}.sa")
-            ]
-            tuple(ref, index_files)
-        }
-    
-    // Run BWA index only on references that need it
-    needs_indexing_refs = ref_branches.needs_indexing.map { ref, is_indexed -> ref }
-    newly_indexed = bwa_index(needs_indexing_refs)
-    
-    // Combine both channels - one or the other will be empty
-    bwa_index_ch = already_indexed.mix(newly_indexed.reference)
-    }   else {
-        // BWA is not needed for existing-BAM mode, but downstream variant
-        // callers still require a reference bundle channel to synchronize on.
+    if (need_bwa_index) {
+        // Branch references based on whether BWA index exists
+        ref_branches = ch_ref_split.for_bwa
+            .map { ref ->
+                def is_indexed = check_bwa_index_exists(ref)
+                tuple(ref, is_indexed)
+            }
+            .branch {
+                indexed: it[1] == true
+                needs_indexing: it[1] == false
+            }
+
+        // For already indexed references, create a channel matching bwa_index output format
+        already_indexed = ref_branches.indexed
+            .map { ref, is_indexed ->
+                def index_files = [
+                    file("${ref}.amb"),
+                    file("${ref}.ann"),
+                    file("${ref}.bwt"),
+                    file("${ref}.pac"),
+                    file("${ref}.sa")
+                ]
+                tuple(ref, index_files)
+            }
+
+        // Run BWA index only on references that need it
+        needs_indexing_refs = ref_branches.needs_indexing.map { ref, is_indexed -> ref }
+        newly_indexed = bwa_index(needs_indexing_refs)
+
+        // Combine both channels - one or the other will be empty
+        bwa_index_ch = already_indexed.mix(newly_indexed.reference)
+    }
+    else {
+        // BWA is not needed (existing-BAM mode, or minibwa-only mapping), but
+        // downstream variant callers still require a reference bundle channel
+        // to synchronize on.
         bwa_index_ch = ch_ref_split.for_bwa
             .map { ref -> tuple(ref, []) }
     }
+
     // Index with samtools
     faidx_and_chunks_ch = samtools_index(ch_ref_split.for_samtools)
     
@@ -169,6 +191,7 @@ workflow INDEX_REFERENCE {
 
     emit:
     bwa_index          = bwa_index_ch
+    minibwa_index      = minibwa_index_ch
     reference_fasta    = reference_fasta
     reference_fai      = reference_fai
     reference_gzi      = reference_gzi

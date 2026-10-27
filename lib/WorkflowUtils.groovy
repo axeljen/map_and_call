@@ -32,6 +32,27 @@ class WorkflowUtils {
     }
 
     /*
+     * Check whether the sample sheet contains any (non-commented) rows with the given
+     * data_type (e.g. '2' for historical samples). Evaluated when the workflow is built,
+     * so it can be used to decide which processes need to run.
+     */
+    static boolean sampleSheetHasDataType(metadata_file, data_type) {
+        def sheet = prepareSampleSheet(metadata_file)
+        def lines = new File(sheet.path).readLines().findAll { it.trim() }
+        def header = lines[0].split(java.util.regex.Pattern.quote(sheet.sep)).collect { it.trim() }
+        def sample_idx = header.indexOf('sample_id')
+        def type_idx = header.indexOf('data_type')
+        if (type_idx < 0) {
+            throw new Exception("Sample sheet is missing a 'data_type' column: ${metadata_file}")
+        }
+        return lines.drop(1).any { line ->
+            def fields = line.split(java.util.regex.Pattern.quote(sheet.sep), -1).collect { it.trim() }
+            def commented = sample_idx >= 0 && fields[sample_idx].startsWith('#')
+            !commented && fields.size() > type_idx && fields[type_idx] == data_type.toString()
+        }
+    }
+
+    /*
      * Coerce a numeric param to its intended type: values containing a '.' are parsed as
      * BigDecimal, everything else as Integer. Needed because bare CLI values always arrive
      * as Strings on Nextflow 26+, and Groovy silently does the wrong thing with a numeric

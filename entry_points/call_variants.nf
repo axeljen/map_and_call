@@ -223,7 +223,8 @@ workflow {
         params.x_scaffolds ?: [],
         params.y_scaffolds ?: [],
         params.z_scaffolds ?: [],
-        params.w_scaffolds ?: []
+        params.w_scaffolds ?: [],
+        false
     )
     
     // ═══════════════════════════════════════════════════════════════════════════════

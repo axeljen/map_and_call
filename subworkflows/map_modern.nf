@@ -10,6 +10,7 @@
 // Module imports
 // ─────────────────────────────────────────────────────────────────────────────
 include { bwa_mem } from '../modules/bwa/bwa_mem'
+include { minibwa_map } from '../modules/minibwa/minibwa_map'
 
 workflow MAP_MODERN {
     take:
@@ -31,8 +32,11 @@ workflow MAP_MODERN {
     if (mapper == 'bwa_mem') {
         rawbam_ch = bwa_mem(modern_pairs_to_map)
     }
+    else if (mapper == 'minibwa') {
+        rawbam_ch = minibwa_map(modern_pairs_to_map)
+    }
     else {
-        error "Unsupported mapper specified: ${mapper}. Currently only 'bwa_mem' is supported."
+        error "Unsupported mapper specified: ${mapper}. Currently only 'bwa_mem' and 'minibwa' are supported."
     }
 
     emit:

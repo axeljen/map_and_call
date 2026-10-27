@@ -344,7 +344,8 @@ workflow {
         params.x_scaffolds ?: [],
         params.y_scaffolds ?: [],
         params.z_scaffolds ?: [],
-        params.w_scaffolds ?: []
+        params.w_scaffolds ?: [],
+        params.mode == 'map_and_call' && WorkflowUtils.sampleSheetHasDataType(params.input, '2')
     )
 
     if (params.mode == 'map_and_call') {
@@ -360,8 +361,8 @@ workflow {
 
         MAP_MODERN(
             PREPROCESS_MODERN.out.clean_reads,
-            INDEX_REFERENCE.out.bwa_index,
-            params.mapper
+            params.modern_mapper == 'minibwa' ? INDEX_REFERENCE.out.minibwa_index : INDEX_REFERENCE.out.bwa_index,
+            params.modern_mapper
         )
         MAP_HISTORICAL(
             PREPROCESS_HISTORICAL.out.clean_paired,
