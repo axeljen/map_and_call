@@ -31,3 +31,5 @@ conf/CONTAINER_BUILD_CHECKLIST.md
 .community*
 example*
 .singularity/*
+bin/tests/test_reference_input.py
+bin/tests/test_sra_input.py
