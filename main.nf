@@ -7,6 +7,8 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 include { INDEX_REFERENCE } from './subworkflows/index_reference'
+include { datasets_download } from './modules/ncbi_datasets/ncbi_datasets'
+include { DOWNLOAD_READS } from './subworkflows/download_reads'
 include { PREPROCESS_MODERN } from './subworkflows/preprocess_modern'
 include { PREPROCESS_HISTORICAL } from './subworkflows/preprocess_historical'
 include { MAP_MODERN } from './subworkflows/map_modern'
@@ -38,8 +40,30 @@ include { combine_summary_tables } from './modules/summary_stats/combine_summary
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /*
+ * Resolve an existing reference FASTA or download an NCBI genome accession.
+ */
+workflow PREPARE_REFERENCE {
+    take:
+    reference
+
+    main:
+    if (!reference) {
+        error 'Please provide --reference with a FASTA path or NCBI genome accession'
+    }
+    if (file(reference).exists()) {
+        resolved_reference = channel.value(file(reference))
+    } else {
+        datasets_download(channel.value(reference))
+        resolved_reference = datasets_download.out.reference_genome
+    }
+
+    emit:
+    reference_genome = resolved_reference
+}
+
+/*
  * Parse input metadata CSV
- * Expected format: sample_id;taxon;read_1;read_2 (semicolon, comma, tab, or whitespace separated)
+ * Expected format: sample_id;data_type;library;read_1;read_2 (semicolon, comma, tab, or whitespace separated)
  */
 def parse_input(metadata_file) {
     def sheet = WorkflowUtils.prepareSampleSheet(metadata_file)
@@ -52,12 +76,20 @@ def parse_input(metadata_file) {
             def sample_id = row.sample_id
             def library = row.library
 
-            // Construct read paths based on params.reads_dir
-            def read_1_path = params.reads_dir ? "${params.reads_dir}/${row.read_1}" : row.read_1
-            def read_2_path = params.reads_dir ? "${params.reads_dir}/${row.read_2}" : row.read_2
+            def read_1_value = row.read_1?.trim()
+            def read_2_value = row.read_2?.trim()
+            def is_sra = read_1_value ==~ /(?:SRR|ERR|DRR)\d+/
+            if (is_sra && read_2_value && !read_2_value.equalsIgnoreCase('null')) {
+                error "SRA accession '${read_1_value}' requires an empty read_2 for sample '${sample_id}'"
+            }
+            if (!is_sra && (!read_2_value || read_2_value.equalsIgnoreCase('null'))) {
+                error "Local reads require both read_1 and read_2 for sample '${sample_id}'"
+            }
+            def read_1_path = params.reads_dir ? "${params.reads_dir}/${read_1_value}" : read_1_value
+            def read_2_path = params.reads_dir ? "${params.reads_dir}/${read_2_value}" : read_2_value
 
-            def read_1 = file(read_1_path, checkIfExists: true)
-            def read_2 = file(read_2_path, checkIfExists: true)
+            def read_1 = is_sra ? read_1_value : file(read_1_path, checkIfExists: true)
+            def read_2 = is_sra ? null : file(read_2_path, checkIfExists: true)
             return [sample_id, data_type, library, read_1, read_2]
         }
         // add lane information if multiple entries per sample_id
@@ -73,6 +105,25 @@ def parse_input(metadata_file) {
                 }
             }
         }
+}
+
+workflow PREPARE_READS {
+    take:
+    metadata_file
+
+    main:
+    sources = parse_input(metadata_file)
+        .branch { sample_id, lane, data_type, library, read_1, read_2 ->
+            sra: read_2 == null
+            local: true
+        }
+    DOWNLOAD_READS(sources.sra.map { sample_id, lane, data_type, library, sra_id, read_2 ->
+        tuple(sample_id, lane, data_type, library, sra_id)
+    })
+    resolved_reads = sources.local.mix(DOWNLOAD_READS.out.fastq_files)
+
+    emit:
+    reads = resolved_reads
 }
 
 def parse_bamfile_list(bamfile_list) {
@@ -331,7 +382,7 @@ workflow {
     if (run_full_pipeline) {
 
     // Reference genome
-    ch_reference = channel.fromPath(params.reference, checkIfExists: true)
+    ch_reference = PREPARE_REFERENCE(params.reference).reference_genome
 
     // ═══════════════════════════════════════════════════════════════════════════════
     //                     SUBWORKFLOW 1: INDEX REFERENCE
@@ -349,7 +400,7 @@ workflow {
     )
 
     if (params.mode == 'map_and_call') {
-        ch_input = parse_input(params.input)
+        ch_input = PREPARE_READS(params.input).reads
             .branch {
                 sample_id, lane, data_type, library, r1, r2 ->
                 modern: data_type == '1'
@@ -534,7 +585,7 @@ workflow {
         // ═══════════════════════════════════════════════════════════════════════
         println "Running PREPROCESS_READS mode: preprocessing only, outputting clean reads."
 
-        ch_input = parse_input(params.input)
+        ch_input = PREPARE_READS(params.input).reads
             .branch {
                 sample_id, lane, data_type, library, r1, r2 ->
                 modern: data_type == '1'
@@ -570,7 +621,7 @@ workflow {
         println "Running READ_QC mode: FastQC/MultiQC only, no preprocessing or mapping."
 
         if (params.input) {
-            ch_qc_input = parse_input(params.input)
+            ch_qc_input = PREPARE_READS(params.input).reads
                 .map { sample_id, lane, _data_type, library, r1, r2 ->
                     tuple(sample_id, lane, library, [r1, r2], 'raw_reads')
                 }

@@ -68,6 +68,22 @@ after mapping.
 run. Either specify the full path to the reads, or -- to keep the input file a
 bit cleaner -- put all reads (or links to them) in a common directory, and point
 to this directory with the `--reads_dir` argument when running the pipeline.
+Alternatively, put an SRA run accession (`SRR`, `ERR`, or `DRR` followed by digits)
+in `read_1` and leave `read_2` empty or set it to `null`. These runs are downloaded
+through `DOWNLOAD_READS` before QC, preprocessing, and mapping; `--reads_dir`
+is not applied to accessions. Local read pairs and SRA runs can be mixed in the
+same sheet, including multiple runs for the same sample/library. For example:
+
+```csv
+sample_id,library,data_type,read_1,read_2
+sample_1,lib1,1,SRR123456,
+sample_2,lib1,2,ERR123456,null
+```
+
+Use comma-, semicolon-, or tab-separated sheets to preserve empty fields.
+The downloader requires SRA Toolkit's `fastq-dump` in the task environment and
+expects paired-end runs. Local FASTQ inputs still require both read files.
+
 For example:
 
 Start by creating symbolic links from all reads to a common directory:
@@ -98,7 +114,7 @@ $ sbatch run_on_dardel.sh
 
 Input files:
 
-1. **Reference genome** (nt sequences) in FASTA format. Can be compressed (gzip) or not.
+1. **Reference genome** (nt sequences) in FASTA format. Can be compressed (gzip) or not. Alternatively, supply an NCBI genome assembly accession, for example `--reference GCF_000001405.40`. If the reference does not exist as a path, the pipeline attempts to download it with NCBI Datasets and uses the downloaded, bgzip-compressed FASTA throughout the pipeline. Invalid accessions fail at the download step.
 2. **Paired-end sequencing reads** in FASTQ format. Can be compressed (gzip) or
 not. Files need to have the suffix `.fq`, `.fastq`, `.fq.gz`, or `.fastq.gz`.
 
@@ -199,7 +215,7 @@ Workflow parameters can be changed by editing the configuration file
 | Option | Type | Default | Description |
 |---|---:|---:|---|
 | `--input` | path | `null` | Path to the input CSV. Expected columns: `sample_id;lane;datatype;library;read_1;read_2`. |
-| `--reference` | path | `null` | Path to the reference FASTA file. |
+| `--reference` | path/accession | `null` | Existing reference FASTA path or NCBI genome assembly accession to download. |
 
 ### Run naming and output
 
