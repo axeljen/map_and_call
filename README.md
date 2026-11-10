@@ -365,9 +365,27 @@ These are internal defaults used when custom filter expressions are not provided
 | Option | Type | Default | Description |
 |---|---:|---:|---|
 | `--progressive_cleanup` | boolean | `false` | Progressively clean work directories while the workflow runs. Experimental and breaks resumability. |
-| `--use_scratch` | boolean | `false` | Use scratch space on compute nodes if available. |
+| `--use_scratch` | boolean | `false` | Run processing tasks in `--scratch_dir` when enabled, except for profile-specific exclusions below; otherwise use their normal work directories. Cleanup tasks continue to operate in the work directory. |
+| `--scratch_dir` | path | profile-dependent | Scratch directory used with `--use_scratch`. Set explicitly if the selected profile does not define it. Supports compute-node environment variables, e.g. `--scratch_dir '$SLURM_TMPDIR'`. |
 | `--boost_cleanup` | boolean | `false` | Enable nf-boost cleanup of the work directory during execution. |
 | `--boost_cleanup_interval` | duration | `180s` | Cleanup interval used by nf-boost. |
+
+On Arrhenius, local scratch is approximately 6.7 GB per allocated CPU. The
+`arrhenius` profile therefore disables scratch for these processes, including
+their workflow aliases, even with `--use_scratch`:
+
+- Read concatenation, read-length splitting and AdapterRemoval.
+- Depth generation/aggregation and callable-region generation.
+- BAM-to-CRAM conversion, downsampling and damage rescaling.
+- Input VCF compression/indexing, VCF concatenation and FreeBayes.
+- Callability filtering and mask generation/concatenation.
+
+Qualimap also bypasses scratch when its input is CRAM, since it creates a
+temporary BAM. These tasks use the normal Nextflow work directory; place it on
+shared storage. Other processes retain opt-in scratch behavior, and other
+profiles are unchanged. Allocated scratch is still finite for retained tasks,
+particularly SRA extraction and sorting. Tools may use `/tmp` or `$TMPDIR`
+independently of Nextflow's scratch setting.
 
 ### Notes
 

@@ -1,6 +1,6 @@
 
 process freebayes{
-    scratch params.use_scratch
+    scratch (params.use_scratch ? params.scratch_dir : false)
     tag "freebayes_${region_id}"
     conda "${moduleDir}/environment.yml"
 

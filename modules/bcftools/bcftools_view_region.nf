@@ -3,7 +3,7 @@
  * across the same region chunks used elsewhere in the pipeline
  */
 process bcftools_view_region {
-    scratch params.use_scratch
+    scratch (params.use_scratch ? params.scratch_dir : false)
     tag "region-${region_id}"
     conda "${moduleDir}/environment.yml"
 

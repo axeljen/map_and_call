@@ -1,5 +1,5 @@
 process bcftools_filter_gatkindels {
-    scratch params.use_scratch
+    scratch (params.use_scratch ? params.scratch_dir : false)
     tag "filter_indels"
     label 'process_wide'
     conda "${moduleDir}/environment.yml"

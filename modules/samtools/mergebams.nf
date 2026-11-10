@@ -1,6 +1,6 @@
 // Merge bam alignments generated from different sequencing runs/lanes for the same sample
 process samtools_merge {
-    scratch params.use_scratch
+    scratch (params.use_scratch ? params.scratch_dir : false)
     tag "$sample_id"
     conda "${moduleDir}/environment.yml"
 
@@ -26,6 +26,7 @@ process samtools_merge {
 
 // Merge bam alignments generated from different sequencing runs/lanes for the same sample
 process merge_historical_bams {
+    scratch (params.use_scratch ? params.scratch_dir : false)
     tag "$sample_id"
     conda "${moduleDir}/environment.yml"
 
@@ -50,6 +51,7 @@ process merge_historical_bams {
 }
 
 process merge_aln_mem {
+    scratch (params.use_scratch ? params.scratch_dir : false)
     tag "$sample_id"
     conda "${moduleDir}/environment.yml"
 

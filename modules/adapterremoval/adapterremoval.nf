@@ -1,5 +1,5 @@
 process adapterremoval {
-    scratch params.use_scratch
+    scratch (params.use_scratch ? params.scratch_dir : false)
     tag "adapterremoval"
     label "wide"
     conda "${moduleDir}/environment.yml"

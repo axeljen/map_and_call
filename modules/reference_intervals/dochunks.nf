@@ -1,7 +1,7 @@
 // Simple process to split input files into chunks for parallel processing
 
 process dochunks {
-    scratch params.use_scratch
+    scratch (params.use_scratch ? params.scratch_dir : false)
     tag "refintervals"
     label 'thin_short'
     conda "${moduleDir}/environment.yml"

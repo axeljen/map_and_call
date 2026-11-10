@@ -1,5 +1,5 @@
 process finalize_masks_legacy {
-    scratch params.use_scratch
+    scratch (params.use_scratch ? params.scratch_dir : false)
     tag "finalize_masks"
     label 'medium_short'
     conda "${moduleDir}/environment.yml"
@@ -55,7 +55,7 @@ process finalize_masks_legacy {
 }
 
 process finalize_masks {
-    scratch params.use_scratch
+    scratch (params.use_scratch ? params.scratch_dir : false)
     tag "finalize_masks"
     label 'medium_short'
     conda "${moduleDir}/environment.yml"

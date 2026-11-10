@@ -1,5 +1,5 @@
 process samtools_dp_deprecated {
-    scratch params.use_scratch
+    scratch (params.use_scratch ? params.scratch_dir : false)
     tag "samtools_dp"
     
     conda "${moduleDir}/environment.yml"
@@ -36,7 +36,7 @@ process samtools_dp_deprecated {
 }
 
 process samtools_dp {
-    scratch params.use_scratch
+    scratch (params.use_scratch ? params.scratch_dir : false)
     tag "samtools_dp"
     
     conda "${moduleDir}/environment.yml"

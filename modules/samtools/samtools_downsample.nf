@@ -1,7 +1,7 @@
 
 
 process samtools_downsample {
-    scratch params.use_scratch
+    scratch (params.use_scratch ? params.scratch_dir : false)
     tag "samtools_downsample_${sample}"
     label 'medium_medium'
     conda "${moduleDir}/environment.yml"

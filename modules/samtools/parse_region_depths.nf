@@ -1,5 +1,5 @@
 process parse_region_depths {
-    scratch params.use_scratch
+    scratch (params.use_scratch ? params.scratch_dir : false)
     tag "parse_depths"
     label 'thin_short'
     conda "${moduleDir}/environment.yml"

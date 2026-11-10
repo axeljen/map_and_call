@@ -1,5 +1,5 @@
 process combine_bedfiles {
-    scratch params.use_scratch
+    scratch (params.use_scratch ? params.scratch_dir : false)
     tag "combine_bedfiles"
     label 'medium_short'
     conda "${moduleDir}/environment.yml"
@@ -32,7 +32,7 @@ process combine_bedfiles {
 }
 
 process concatenate_masks {
-    scratch params.use_scratch
+    scratch (params.use_scratch ? params.scratch_dir : false)
     tag "concatenate_masks"
     label 'thin_short'
     conda "${moduleDir}/environment.yml"

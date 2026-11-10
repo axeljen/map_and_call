@@ -1,5 +1,5 @@
 process callability_filter_legacy {
-    scratch params.use_scratch
+    scratch (params.use_scratch ? params.scratch_dir : false)
     tag "vcf_depth_filter_sample"
     conda "${moduleDir}/environment.yml"
     label "thin_medium"
@@ -50,7 +50,7 @@ process callability_filter_legacy {
 }
 
 process callability_filter {
-    scratch params.use_scratch
+    scratch (params.use_scratch ? params.scratch_dir : false)
     tag "vcf_depth_filter_sample"
     conda "${moduleDir}/environment.yml"
     label "thin_medium"

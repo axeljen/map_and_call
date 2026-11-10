@@ -3,7 +3,7 @@
  */
 
 process clumpify_single {
-    scratch params.use_scratch
+    scratch (params.use_scratch ? params.scratch_dir : false)
     tag "$sample_id"
     conda "${moduleDir}/environment.yml"
 
@@ -37,6 +37,7 @@ process clumpify_single {
 }
 
 process clumpify_paired {
+    scratch (params.use_scratch ? params.scratch_dir : false)
     tag "$sample_id"
     conda "${moduleDir}/environment.yml"
 
