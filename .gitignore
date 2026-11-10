@@ -33,3 +33,5 @@ example*
 .singularity/*
 bin/tests/test_reference_input.py
 bin/tests/test_sra_input.py
+bean_geese_variants
+readlinks
