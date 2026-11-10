@@ -1,6 +1,5 @@
 
 process freebayes{
-    scratch (params.use_scratch ? params.scratch_dir : false)
     tag "freebayes_${region_id}"
     conda "${moduleDir}/environment.yml"
 
@@ -33,16 +32,17 @@ process freebayes{
 
     # freebayes doesn't like zipped fasta files, so if it's a gzipped reference, extract
     if [[ ${reference} == *.gz ]]; then
+        source task_tmp.sh ${params.use_scratch} "\${TASK_SCRATCH_ROOT:-${params.use_scratch ? params.scratch_dir ?: '' : ''}}"
         echo "Reference genome is gzipped, extracting..."
-        gunzip -c ${reference} > ${reference.baseName}
-        reference_file=${reference.baseName}
+        gunzip -c ${reference} > "\$TMPDIR/${reference.baseName}"
+        reference_file="\$TMPDIR/${reference.baseName}"
         # Link the existing .fai file 
-        ln -s ${reference_indices[0]} \${reference_file}.fai
+        ln -s "\$(realpath ${reference_indices[0]})" "\${reference_file}.fai"
     else 
         reference_file=${reference}
     fi
 
-    freebayes -f \${reference_file} -t freebayes_targets.bed --populations freebayes_popfile.txt --min-mapping-quality ${params.min_mapqual} --min-base-quality ${params.min_basequal} --ploidy ${params.ploidy} ${report_monomorphic} ${bamlist} | bgzip - > freebayes.region-${region_id}.vcf.gz
+    freebayes -f "\${reference_file}" -t freebayes_targets.bed --populations freebayes_popfile.txt --min-mapping-quality ${params.min_mapqual} --min-base-quality ${params.min_basequal} --ploidy ${params.ploidy} ${report_monomorphic} ${bamlist} | bgzip - > freebayes.region-${region_id}.vcf.gz
     bcftools index freebayes.region-${region_id}.vcf.gz
     """
 

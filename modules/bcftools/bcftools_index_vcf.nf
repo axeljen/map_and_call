@@ -2,7 +2,6 @@
  * Compress (if needed) and index a user-supplied VCF file
  */
 process bcftools_index_vcf {
-    scratch (params.use_scratch ? params.scratch_dir : false)
     tag "index_vcf"
     conda "${moduleDir}/environment.yml"
 

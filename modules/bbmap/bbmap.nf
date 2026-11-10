@@ -3,7 +3,6 @@
  */
 
 process clumpify_single {
-    scratch (params.use_scratch ? params.scratch_dir : false)
     tag "$sample_id"
     conda "${moduleDir}/environment.yml"
 
@@ -18,11 +17,13 @@ process clumpify_single {
     """
 
     set -eou pipefail
+    source task_tmp.sh ${params.use_scratch} "\${TASK_SCRATCH_ROOT:-${params.use_scratch ? params.scratch_dir ?: '' : ''}}"
 
     clumpify.sh \
         -Xmx${mem}g \
         -eoom \
         simd=f \
+        usetmpdir=t \
         threads=${params.clumpify_threads} \
         in=${reads} \
         out=${sample_id}_${library}_dedup_fastq.gz \
@@ -37,7 +38,6 @@ process clumpify_single {
 }
 
 process clumpify_paired {
-    scratch (params.use_scratch ? params.scratch_dir : false)
     tag "$sample_id"
     conda "${moduleDir}/environment.yml"
 
@@ -53,11 +53,13 @@ process clumpify_paired {
     """
 
     set -eou pipefail
+    source task_tmp.sh ${params.use_scratch} "\${TASK_SCRATCH_ROOT:-${params.use_scratch ? params.scratch_dir ?: '' : ''}}"
 
     clumpify.sh \
         -Xmx${mem}g \
         -eoom \
         simd=f \
+        usetmpdir=t \
         threads=${params.clumpify_threads} \
         in=${reads1} \
         in2=${reads2} \

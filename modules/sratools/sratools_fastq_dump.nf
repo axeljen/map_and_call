@@ -1,5 +1,4 @@
 process sratools_fastq_dump {
-    scratch (params.use_scratch ? params.scratch_dir : false)
     tag "sra_fastqdump"
     label 'medium_long'
     // conda "${moduleDir}/environment.yml"
@@ -14,15 +13,16 @@ process sratools_fastq_dump {
 
     script:
     """
-    echo "Task directory:"
-    pwd
-    df -hT .
+    source task_tmp.sh ${params.use_scratch} "\${TASK_SCRATCH_ROOT:-${params.use_scratch ? params.scratch_dir ?: '' : ''}}"
+    df -hT "\$TMPDIR"
 
-    prefetch $sra_id --max-size u -O .
+    prefetch $sra_id --max-size u -O "\$TMPDIR"
     echo "Starting fasterq-dump"
-    fasterq-dump ./$sra_id -t . -O . -e $task.cpus
+    fasterq-dump "\$TMPDIR/$sra_id" -t "\$TMPDIR" -O "\$TMPDIR" -e $task.cpus
     echo "Starting compression"
-    pigz -p $task.cpus ${sra_id}_1.fastq ${sra_id}_2.fastq
+    pigz -p $task.cpus -c "\$TMPDIR/${sra_id}_1.fastq" > ${sra_id}_1.fastq.gz
+    rm "\$TMPDIR/${sra_id}_1.fastq"
+    pigz -p $task.cpus -c "\$TMPDIR/${sra_id}_2.fastq" > ${sra_id}_2.fastq.gz
 
     """
 

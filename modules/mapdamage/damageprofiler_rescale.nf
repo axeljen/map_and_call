@@ -1,7 +1,6 @@
 // Check 
 
 process damage_profiler_rescale {
-    scratch (params.use_scratch ? params.scratch_dir : false)
     tag "$sample_id"
     conda "${moduleDir}/environment.yml"
 
@@ -16,16 +15,17 @@ process damage_profiler_rescale {
     script:
 
     """
-    
+    source task_tmp.sh ${params.use_scratch} "\${TASK_SCRATCH_ROOT:-${params.use_scratch ? params.scratch_dir ?: '' : ''}}"
+
     ## Mapdamage command - use fixed output directory name for reproducibility
-    mapDamage -i ${bam_file} -r ${reference_genome} -d results_${sample_id} --rescale
+    mapDamage -i ${bam_file} -r ${reference_genome} -d "\$TMPDIR/results_${sample_id}" --rescale
 
     # move damage profiler results to a subdirectory with the sample name
     mkdir -p ${sample_id}_damage
-    mv results_${sample_id}/*.pdf ${sample_id}_damage/ 2>/dev/null || true
+    mv "\$TMPDIR/results_${sample_id}"/*.pdf ${sample_id}_damage/ 2>/dev/null || true
 
     # find the rescaled bam, sort and index
-    samtools sort -@ ${task.cpus} -o ${sample_id}.rescaled.dedup.bam results_${sample_id}/*rescaled.bam
+    samtools sort -@ ${task.cpus} -T "\$TMPDIR/sort" -o ${sample_id}.rescaled.dedup.bam "\$TMPDIR/results_${sample_id}"/*rescaled.bam
     samtools index ${sample_id}.rescaled.dedup.bam
 
     """

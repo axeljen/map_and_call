@@ -1,7 +1,6 @@
 // Check 
 
 process qualimap {
-    scratch (params.use_scratch ? params.scratch_dir : false)
     tag "$sample_id"
     label 'medium_medium'
     conda "${moduleDir}/environment.yml"
@@ -18,17 +17,15 @@ process qualimap {
     bamfile=${bam_file}
     # convert from cram to bam if in cram format
     if [[ ${bam_file} == *.cram ]]; then
-        samtools view -@ ${task.cpus} -b -o tmp.${sample_id}.bam ${bam_file}
-        bamfile=tmp.${sample_id}.bam
+        source task_tmp.sh ${params.use_scratch} "\${TASK_SCRATCH_ROOT:-${params.use_scratch ? params.scratch_dir ?: '' : ''}}"
+        samtools view -@ ${task.cpus} -b -o "\$TMPDIR/${sample_id}.bam" ${bam_file}
+        bamfile="\$TMPDIR/${sample_id}.bam"
     fi
-    qualimap bamqc --java-mem-size=${mem}M -bam \$bamfile -outfile ${sample_id}_qualimap.pdf -outdir . -outformat PDF
+    qualimap bamqc --java-mem-size=${mem}M -bam "\$bamfile" -outfile ${sample_id}_qualimap.pdf -outdir . -outformat PDF
     # move the final pdf here
-    pdf_file=\$(find . -name "*qualimap.pdf" | head -n 1)
-    mv \$pdf_file ${sample_id}_qualimap.pdf
-
-    # remove the intermediate bam file if it was created
-    if [[ ${bam_file} == *.cram ]]; then
-        rm -f tmp.${sample_id}.bam
+    pdf_file=\$(find . -name "*qualimap.pdf" -type f -print -quit)
+    if [[ "\$pdf_file" != "./${sample_id}_qualimap.pdf" ]]; then
+        mv "\$pdf_file" ${sample_id}_qualimap.pdf
     fi
 
 

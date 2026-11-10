@@ -1,5 +1,4 @@
 process select_indels {
-    scratch (params.use_scratch ? params.scratch_dir : false)
     tag "select_indels"
     label 'thin_short'
     conda "${moduleDir}/environment.yml"

@@ -3,7 +3,6 @@
  */
 
 process minibwa_map {
-    scratch (params.use_scratch ? params.scratch_dir : false)
     tag "$sample_id"
     conda "${moduleDir}/environment.yml"
 
@@ -16,6 +15,7 @@ process minibwa_map {
 
     script:
     """
+    source task_tmp.sh ${params.use_scratch} "\${TASK_SCRATCH_ROOT:-${params.use_scratch ? params.scratch_dir ?: '' : ''}}"
     ## extract the read group string from the fasta header
     # HEADER=\$(zcat ${read1} | head -1 | sed 's/^@//')
     
@@ -54,7 +54,7 @@ process minibwa_map {
          ${read1} \
          ${read2} \
      | samtools view -@ ${task.cpus} -q ${params.min_mapqual} -b -o - - | \
-     samtools sort -@ ${task.cpus} -o ${sample_id}_${library}.sorted.bam -
+     samtools sort -@ ${task.cpus} -T "\$TMPDIR/sort" -o ${sample_id}_${library}.sorted.bam -
 
     samtools index ${sample_id}_${library}.sorted.bam
     """

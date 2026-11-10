@@ -1,5 +1,4 @@
 process combine_stats {
-    scratch (params.use_scratch ? params.scratch_dir : false)
     tag "combine_stats"
     label 'medium_short'
     conda "${moduleDir}/environment.yml"

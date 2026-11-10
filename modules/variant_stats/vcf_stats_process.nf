@@ -1,5 +1,4 @@
 process vcf_stats {
-    scratch (params.use_scratch ? params.scratch_dir : false)
     tag "vcf_stats"
     label 'medium_medium'
     conda "${moduleDir}/environment.yml"

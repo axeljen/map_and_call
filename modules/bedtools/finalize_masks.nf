@@ -1,5 +1,4 @@
 process finalize_masks_legacy {
-    scratch (params.use_scratch ? params.scratch_dir : false)
     tag "finalize_masks"
     label 'medium_short'
     conda "${moduleDir}/environment.yml"
@@ -16,34 +15,27 @@ process finalize_masks_legacy {
     script:
     def region_list = regions.join(' ')
     """
+    source task_tmp.sh ${params.use_scratch} "\${TASK_SCRATCH_ROOT:-${params.use_scratch ? params.scratch_dir ?: '' : ''}}"
     # make dummy bedfile for filtering input bed
     for region in ${region_list};
         do
         chrom=\$(echo \$region | cut -d: -f1)
         start=\$((\$(echo \$region | cut -d: -f2 | cut -d- -f1) - 1))
         end=\$(echo \$region | cut -d: -f2 | cut -d- -f2)
-        echo -e "\${chrom}\t\${start}\t\${end}" >> ${sample_id}_${region_id}_regionstring.bed
+        echo -e "\${chrom}\t\${start}\t\${end}" >> "\$TMPDIR/regions.bed"
     done
-    bedtools intersect -a ${callable_bed} -b ${sample_id}_${region_id}_regionstring.bed > ${sample_id}_${region_id}_callable.bed.tmp && mv ${sample_id}_${region_id}_callable.bed.tmp ${sample_id}_${region_id}_callable.bed
+    bedtools intersect -a ${callable_bed} -b "\$TMPDIR/regions.bed" > "\$TMPDIR/callable.bed"
 
     # now it's just a matter of subtracting some stuff from callable bed to get the different masks
     # homref invariants should only contain regions that are not represented in the vcf files, so subtract both the filtered snps and indels from the callable bed
-    bedtools subtract -a ${sample_id}_${region_id}_callable.bed -b ${filtered_snps} | \
-        bedtools subtract -a - -b ${filtered_indels} > ${sample_id}_${region_id}.homref_invariants.bed
+    bedtools subtract -a "\$TMPDIR/callable.bed" -b ${filtered_snps} | \
+        bedtools subtract -a - -b ${filtered_indels} | gzip -c > ${sample_id}_${region_id}.homref_invariants.bed.gz
     
     # mappability mask snps should contain all regions with high enough mapping coverage to call variants, but where there are no indels, so subtract those
-    bedtools subtract -a ${sample_id}_${region_id}_callable.bed -b ${filtered_indels} > ${sample_id}_${region_id}.mappability_mask_snps.bed
+    bedtools subtract -a "\$TMPDIR/callable.bed" -b ${filtered_indels} | gzip -c > ${sample_id}_${region_id}.mappability_mask_snps.bed.gz
 
     # mappability mask total should contain all regions with high enough mapping coverage to call variants, so just copy the callable bed and rename it
-    cp ${sample_id}_${region_id}_callable.bed ${sample_id}_${region_id}.mappability_mask_total.bed
-
-    # gzip the output files
-    gzip ${sample_id}_${region_id}.homref_invariants.bed
-    gzip ${sample_id}_${region_id}.mappability_mask_total.bed
-    gzip ${sample_id}_${region_id}.mappability_mask_snps.bed
-
-    # delete temporary files
-    rm ${sample_id}_${region_id}_callable.bed
+    gzip -c "\$TMPDIR/callable.bed" > ${sample_id}_${region_id}.mappability_mask_total.bed.gz
 
     """
 
@@ -55,7 +47,6 @@ process finalize_masks_legacy {
 }
 
 process finalize_masks {
-    scratch (params.use_scratch ? params.scratch_dir : false)
     tag "finalize_masks"
     label 'medium_short'
     conda "${moduleDir}/environment.yml"
@@ -81,13 +72,14 @@ process finalize_masks {
     def sample_names = samples.join(' ')
     def bedfile_paths = bedfiles.join(' ')
     """
+    source task_tmp.sh ${params.use_scratch} "\${TASK_SCRATCH_ROOT:-${params.use_scratch ? params.scratch_dir ?: '' : ''}}"
     # make dummy bedfile for filtering input bed
     for region in ${region_list};
         do
         chrom=\$(echo \$region | cut -d: -f1)
         start=\$((\$(echo \$region | cut -d: -f2 | cut -d- -f1) - 1))
         end=\$(echo \$region | cut -d: -f2 | cut -d- -f2)
-        echo -e "\${chrom}\t\${start}\t\${end}" >> ${region_id}_regionstring.bed
+        echo -e "\${chrom}\t\${start}\t\${end}" >> "\$TMPDIR/regions.bed"
     done
 
     # iterate through all the samples
@@ -99,33 +91,24 @@ process finalize_masks {
         callable_bed="\${bedlist[\$i]}"
         
         # subset the vcf file to the sample and remove missing data so we're only subtracting for this specific sample
-        bcftools view -s "\${sample_id}" ${filtered_snps} | bcftools view -e 'GT="./."' -Oz -o \${sample_id}_${region_id}_filtered_snps.vcf.gz
-        bcftools view -s "\${sample_id}" ${filtered_indels} | bcftools view -e 'GT="./."' -Oz -o \${sample_id}_${region_id}_filtered_indels.vcf.gz
+        bcftools view -s "\${sample_id}" ${filtered_snps} | bcftools view -e 'GT="./."' -Oz -o "\$TMPDIR/filtered_snps.vcf.gz"
+        bcftools view -s "\${sample_id}" ${filtered_indels} | bcftools view -e 'GT="./."' -Oz -o "\$TMPDIR/filtered_indels.vcf.gz"
         
 
-        bedtools intersect -a \${callable_bed} -b ${region_id}_regionstring.bed > \${sample_id}_${region_id}_callable.bed.tmp && mv \${sample_id}_${region_id}_callable.bed.tmp \${sample_id}_${region_id}_callable.bed
+        bedtools intersect -a \${callable_bed} -b "\$TMPDIR/regions.bed" > "\$TMPDIR/callable.bed"
 
         # now it's just a matter of subtracting some stuff from callable bed to get the different masks
         # homref invariants should only contain regions that are not represented in the vcf files, so subtract both the filtered snps and indels from the callable bed
-        bedtools subtract -a \${sample_id}_${region_id}_callable.bed -b \${sample_id}_${region_id}_filtered_snps.vcf.gz | \
-        bedtools subtract -a - -b \${sample_id}_${region_id}_filtered_indels.vcf.gz > \${sample_id}_${region_id}.homref_invariants.bed
+        bedtools subtract -a "\$TMPDIR/callable.bed" -b "\$TMPDIR/filtered_snps.vcf.gz" | \
+        bedtools subtract -a - -b "\$TMPDIR/filtered_indels.vcf.gz" | gzip -c > \${sample_id}_${region_id}.homref_invariants.bed.gz
     
         # mappability mask snps should contain all regions with high enough mapping coverage to call variants, but where there are no indels, so subtract those
-        bedtools subtract -a \${sample_id}_${region_id}_callable.bed -b \${sample_id}_${region_id}_filtered_indels.vcf.gz > \${sample_id}_${region_id}.mappability_mask_snps.bed
+        bedtools subtract -a "\$TMPDIR/callable.bed" -b "\$TMPDIR/filtered_indels.vcf.gz" | gzip -c > \${sample_id}_${region_id}.mappability_mask_snps.bed.gz
 
         # mappability mask total should contain all regions with high enough mapping coverage to call variants, so just copy the callable bed and rename it
-        mv \${sample_id}_${region_id}_callable.bed \${sample_id}_${region_id}.mappability_mask_total.bed
-
-    # gzip the output files
-    gzip \${sample_id}_${region_id}.homref_invariants.bed
-    gzip \${sample_id}_${region_id}.mappability_mask_total.bed
-    gzip \${sample_id}_${region_id}.mappability_mask_snps.bed
-    rm \${sample_id}_${region_id}_filtered_snps.vcf.gz
-    rm \${sample_id}_${region_id}_filtered_indels.vcf.gz
+        gzip -c "\$TMPDIR/callable.bed" > \${sample_id}_${region_id}.mappability_mask_total.bed.gz
 
     done
-
-    rm ${region_id}_regionstring.bed
 
     """
 

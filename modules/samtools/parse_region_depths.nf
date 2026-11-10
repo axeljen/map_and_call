@@ -1,5 +1,4 @@
 process parse_region_depths {
-    scratch (params.use_scratch ? params.scratch_dir : false)
     tag "parse_depths"
     label 'thin_short'
     conda "${moduleDir}/environment.yml"
@@ -18,35 +17,28 @@ process parse_region_depths {
     }
     
     """    
-    # Cat all bed files together, add sort key, sort, then remove key
-    for bed in ${sortedBeds.join(' ')}; do
-        zcat \$bed >> ${sample_id}.depths.bed
-    done
-
-   # then do the average depths per scaffold
-    cat ${sample_id}.depths.bed | \
-        awk 'BEGIN {OFS="\t"} 
+    set -euo pipefail
+    zcat ${sortedBeds.join(' ')} | \
+        awk -v avgfile="${sample_id}.depths.avg.txt" 'BEGIN {OFS="\t"}
         {
             chrom=\$1
             len=\$3-\$2
             total_bases[chrom] += len*\$4
             total_length[chrom] += len
+            print
         } 
         END {
             for (chrom in total_length) {
-                print chrom, total_length[chrom], total_bases[chrom]/total_length[chrom]
+                print chrom, total_length[chrom], total_bases[chrom]/total_length[chrom] > avgfile
             }
-        }' \
-        > ${sample_id}.depths.avg.txt
-    
-    # gzip the bed file to save space
-    gzip -f ${sample_id}.depths.bed
+        }' | gzip -c > ${sample_id}.depths.bed.gz
+    touch ${sample_id}.depths.avg.txt
 
     """
 
     stub:
     """
-    touch ${sample_id}.depths.bed
+    touch ${sample_id}.depths.bed.gz
     touch ${sample_id}.depths.avg.txt
     """
 }

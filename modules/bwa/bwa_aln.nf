@@ -3,7 +3,6 @@
  */
 
 process bwa_aln {
-    scratch (params.use_scratch ? params.scratch_dir : false)
     tag "$sample_id"
     conda "${moduleDir}/environment.yml"
 
@@ -16,6 +15,7 @@ process bwa_aln {
 
     script:
     """
+    source task_tmp.sh ${params.use_scratch} "\${TASK_SCRATCH_ROOT:-${params.use_scratch ? params.scratch_dir ?: '' : ''}}"
     ## extract the read group string from the fasta header
     # HEADER=\$(zcat ${reads} | head -1 | sed 's/^@//')
     
@@ -47,10 +47,10 @@ process bwa_aln {
 
     rg="@RG\\tID:\${RGID}\\tSM:\${SAMPLE}\\tLB:\${SAMPLE}\\tPL:\${PLATFORM}\\tPU:\${PU}"
 
-    bwa aln -t ${task.cpus} ${params.bwa_aln_flags} ${reference} ${reads} > ${sample_id}_${library}_aln.sai
-    bwa samse -r "\${rg}" ${reference} ${sample_id}_${library}_aln.sai ${reads} | \
+    bwa aln -t ${task.cpus} ${params.bwa_aln_flags} ${reference} ${reads} > "\$TMPDIR/aln.sai"
+    bwa samse -r "\${rg}" ${reference} "\$TMPDIR/aln.sai" ${reads} | \
         samtools view -@ ${task.cpus} -q ${params.min_mapqual} -b -o - - | \
-        samtools sort -@ ${task.cpus} -o ${sample_id}_${library}_bwa-aln.sorted.bam -
+        samtools sort -@ ${task.cpus} -T "\$TMPDIR/sort" -o ${sample_id}_${library}_bwa-aln.sorted.bam -
 
     samtools index ${sample_id}_${library}_bwa-aln.sorted.bam
     """
@@ -61,4 +61,3 @@ process bwa_aln {
     touch ${sample_id}_${library}_bwa-aln.sorted.bam.bai
     """
 }
-

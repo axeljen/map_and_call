@@ -1,5 +1,4 @@
 process samtools_dp_deprecated {
-    scratch (params.use_scratch ? params.scratch_dir : false)
     tag "samtools_dp"
     
     conda "${moduleDir}/environment.yml"
@@ -21,22 +20,18 @@ process samtools_dp_deprecated {
         samtools depth -r \${region} -Q ${params.min_mapqual} -q ${params.min_basequal} -a ${cram} | \
                 awk -v OFS='\t' ' {print \$1 OFS \$2 - 1 OFS \$2 OFS \$3} ' | \
                 bedtools groupby -i - -g 1,4 -c 2,3 -o min,max | \
-                awk -v OFS='\t' ' { print \$1 OFS \$3 OFS \$4 OFS \$2} ' >> ${region_id}_${sample_id}.depths.bed
-    done
-
-    # zip it to save space
-    gzip -f ${region_id}_${sample_id}.depths.bed
+                awk -v OFS='\t' ' { print \$1 OFS \$3 OFS \$4 OFS \$2} '
+    done | gzip -c > ${region_id}_${sample_id}.depths.bed.gz
 
     """
 
     stub:
     """
-    touch ${region_id}_${sample_id}.depths.bed
+    touch ${region_id}_${sample_id}.depths.bed.gz
     """
 }
 
 process samtools_dp {
-    scratch (params.use_scratch ? params.scratch_dir : false)
     tag "samtools_dp"
     
     conda "${moduleDir}/environment.yml"
@@ -70,10 +65,8 @@ process samtools_dp {
         samtools depth -r \${region} -Q ${params.min_mapqual} -q ${params.min_basequal} -a \${cram} | \
                 awk -v OFS='\t' ' {print \$1 OFS \$2 - 1 OFS \$2 OFS \$3} ' | \
                 bedtools groupby -i - -g 1,4 -c 2,3 -o min,max | \
-                awk -v OFS='\t' ' { print \$1 OFS \$3 OFS \$4 OFS \$2} ' >> ${region_id}_\${sample_id}.depths.bed
-        done
-        # zip it to save space
-        gzip -f ${region_id}_\${sample_id}.depths.bed
+                awk -v OFS='\t' ' { print \$1 OFS \$3 OFS \$4 OFS \$2} '
+        done | gzip -c > ${region_id}_\${sample_id}.depths.bed.gz
     done
 
     
@@ -82,6 +75,8 @@ process samtools_dp {
 
     stub:
     """
-    touch ${region_id}_\${sample_id}.depths.bed
+    for sample_id in ${sample_ids.join(' ')}; do
+        touch ${region_id}_\${sample_id}.depths.bed.gz
+    done
     """
 }

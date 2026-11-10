@@ -1,5 +1,4 @@
 process extract_sample_from_bam {
-    scratch (params.use_scratch ? params.scratch_dir : false)
     tag "$bam"
     label 'process_low'
     conda "${moduleDir}/environment.yml"

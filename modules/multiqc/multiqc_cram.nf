@@ -1,5 +1,4 @@
 process multiqc_cram {
-    scratch (params.use_scratch ? params.scratch_dir : false)
     tag "cram_multiqc"
     label 'thin_short'
     conda "${moduleDir}/environment.yml"

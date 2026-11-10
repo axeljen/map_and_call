@@ -1,5 +1,4 @@
 process samtools_stats {
-    scratch (params.use_scratch ? params.scratch_dir : false)
     tag "$sample_id"
     label 'process_low'
     conda "${moduleDir}/environment.yml"

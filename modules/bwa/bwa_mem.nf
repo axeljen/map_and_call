@@ -3,7 +3,6 @@
  */
 
 process bwa_mem {
-    scratch (params.use_scratch ? params.scratch_dir : false)
     tag "$sample_id"
     conda "${moduleDir}/environment.yml"
 
@@ -16,6 +15,7 @@ process bwa_mem {
 
     script:
     """
+    source task_tmp.sh ${params.use_scratch} "\${TASK_SCRATCH_ROOT:-${params.use_scratch ? params.scratch_dir ?: '' : ''}}"
     ## extract the read group string from the fasta header
     # HEADER=\$(zcat ${read1} | head -1 | sed 's/^@//')
     
@@ -54,7 +54,7 @@ process bwa_mem {
          ${read1} \
          ${read2} \
      | samtools view -@ ${task.cpus} -q ${params.min_mapqual} -b -o - - | \
-     samtools sort -@ ${task.cpus} -o ${sample_id}_${library}.sorted.bam -
+     samtools sort -@ ${task.cpus} -T "\$TMPDIR/sort" -o ${sample_id}_${library}.sorted.bam -
 
     samtools index ${sample_id}_${library}.sorted.bam
     """
@@ -68,7 +68,6 @@ process bwa_mem {
 
 
 process bwa_mem_singlereads {
-    scratch (params.use_scratch ? params.scratch_dir : false)
     tag "$sample_id"
     conda "${moduleDir}/environment.yml"
 
@@ -80,9 +79,7 @@ process bwa_mem_singlereads {
 
     script:
     """
-    # extract the read group string from the fasta header
-    HEADER=\$(zcat ${reads} | head -1 | sed 's/^@//')
-    
+    source task_tmp.sh ${params.use_scratch} "\${TASK_SCRATCH_ROOT:-${params.use_scratch ? params.scratch_dir ?: '' : ''}}"
     ## detect platform/read group info format
     ## Detect format by structure
     #if echo "\$HEADER" | grep -qP '^\\S+:\\d+:[A-Z0-9]+:\\d+:'; then
@@ -116,7 +113,7 @@ process bwa_mem_singlereads {
          ${reference} \
          ${reads} \
      | samtools view -@ ${task.cpus} -q ${params.min_mapqual} -b -o - - | \
-     samtools sort -@ ${task.cpus} -o ${sample_id}_${library}_MR.sorted.bam -
+     samtools sort -@ ${task.cpus} -T "\$TMPDIR/sort" -o ${sample_id}_${library}_MR.sorted.bam -
 
     samtools index ${sample_id}_${library}_MR.sorted.bam
     """

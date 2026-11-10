@@ -1,5 +1,4 @@
 process plot_variant_stats {
-    scratch (params.use_scratch ? params.scratch_dir : false)
     tag "plot_variant_stats_${category}"
     label 'thin_short'
     conda "${moduleDir}/environment.yml"
@@ -12,16 +11,17 @@ process plot_variant_stats {
     path "${category}_report.html", emit: report
     script:
     """
+    source task_tmp.sh ${params.use_scratch} "\${TASK_SCRATCH_ROOT:-${params.use_scratch ? params.scratch_dir ?: '' : ''}}"
     # Create a temporary directory and copy stat files there
-    mkdir -p stats_input
-    cp ${stat_files} stats_input/
+    mkdir -p "\$TMPDIR/stats_input"
+    cp ${stat_files} "\$TMPDIR/stats_input/"
 
     # Run the R script to generate HTML report
-    plot_variantstats.R stats_input
+    plot_variantstats.R "\$TMPDIR/stats_input"
 
     # The R script creates a file based on the input directory name (stats_input_report.html)
     # Copy it to the expected output name
-    OUTPUT_FILE=\$(find stats_input -name '*_report.html' -type f | head -1)
+    OUTPUT_FILE=\$(find "\$TMPDIR/stats_input" -name '*_report.html' -type f -print -quit)
     if [ -z "\$OUTPUT_FILE" ]; then
         echo "Error: No report HTML file was generated"
         exit 1
@@ -36,4 +36,3 @@ process plot_variant_stats {
     touch ${category}_report.html
     """
 }
-

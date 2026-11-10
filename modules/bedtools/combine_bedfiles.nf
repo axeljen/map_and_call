@@ -1,5 +1,4 @@
 process combine_bedfiles {
-    scratch (params.use_scratch ? params.scratch_dir : false)
     tag "combine_bedfiles"
     label 'medium_short'
     conda "${moduleDir}/environment.yml"
@@ -15,13 +14,13 @@ process combine_bedfiles {
 
     script:
     """
+    source task_tmp.sh ${params.use_scratch} "\${TASK_SCRATCH_ROOT:-${params.use_scratch ? params.scratch_dir ?: '' : ''}}"
     for bedfile in ${bedfiles}; do
-        cat \${bedfile} >> tmp.${sample_id}.bed
+        cat \${bedfile} >> "\$TMPDIR/combined.bed"
     done
-    bedtools sort -faidx ${reference_fai} -i tmp.${sample_id}.bed > ${sample_id}_${name}.bed
+    bedtools sort -faidx ${reference_fai} -i "\$TMPDIR/combined.bed" > ${sample_id}_${name}.bed
     # print the sum of all regions to stdout
     awk '{sum += \$3 - \$2} END {print sum}' ${sample_id}_${name}.bed > total_sites.txt
-    rm tmp.${sample_id}.bed
     """
 
     stub:
@@ -32,7 +31,6 @@ process combine_bedfiles {
 }
 
 process concatenate_masks {
-    scratch (params.use_scratch ? params.scratch_dir : false)
     tag "concatenate_masks"
     label 'thin_short'
     conda "${moduleDir}/environment.yml"

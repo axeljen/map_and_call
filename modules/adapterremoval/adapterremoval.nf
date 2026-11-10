@@ -1,5 +1,4 @@
 process adapterremoval {
-    scratch (params.use_scratch ? params.scratch_dir : false)
     tag "adapterremoval"
     label "wide"
     conda "${moduleDir}/environment.yml"
@@ -16,10 +15,11 @@ process adapterremoval {
 
     script:
     """
+    source task_tmp.sh ${params.use_scratch} "\${TASK_SCRATCH_ROOT:-${params.use_scratch ? params.scratch_dir ?: '' : ''}}"
     # Adapter trimming and read merging with adapterremoval
     AdapterRemoval --file1 ${reads_1} --file2 ${reads_2} \
         --threads 8 \
-        --basename ${sample_id}_${lane} \
+        --basename "\$TMPDIR/${sample_id}_${lane}" \
         --trimns --trimqualities --collapse \
         --output1 ${sample_id}_${lane}_trimmed_R1.fastq.gz \
         --output2 ${sample_id}_${lane}_trimmed_R2.fastq.gz \

@@ -365,27 +365,64 @@ These are internal defaults used when custom filter expressions are not provided
 | Option | Type | Default | Description |
 |---|---:|---:|---|
 | `--progressive_cleanup` | boolean | `false` | Progressively clean work directories while the workflow runs. Experimental and breaks resumability. |
-| `--use_scratch` | boolean | `false` | Run processing tasks in `--scratch_dir` when enabled, except for profile-specific exclusions below; otherwise use their normal work directories. Cleanup tasks continue to operate in the work directory. |
-| `--scratch_dir` | path | profile-dependent | Scratch directory used with `--use_scratch`. Set explicitly if the selected profile does not define it. Supports compute-node environment variables, e.g. `--scratch_dir '$SLURM_TMPDIR'`. |
+| `--use_scratch` | boolean | `false` | Put substantial process-private temporary data on scratch. Tasks and declared outputs remain in the normal Nextflow work directory. |
+| `--scratch_dir` | path | profile-dependent | Existing writable scratch root used with `--use_scratch`. Set explicitly if the selected profile does not define it. Supports compute-node environment variables, e.g. `--scratch_dir '$SLURM_TMPDIR'`. |
 | `--boost_cleanup` | boolean | `false` | Enable nf-boost cleanup of the work directory during execution. |
 | `--boost_cleanup_interval` | duration | `180s` | Cleanup interval used by nf-boost. |
 
-On Arrhenius, local scratch is approximately 6.7 GB per allocated CPU. The
-`arrhenius` profile therefore disables scratch for these processes, including
-their workflow aliases, even with `--use_scratch`:
+Place the Nextflow work directory on shared storage. Whole-task Nextflow
+`scratch` is disabled: required FASTQs, alignments, VCFs, masks and indexes are
+written directly to the work directory rather than copied back from scratch.
+This policy applies to all profiles and workflow aliases.
 
-- Read concatenation, read-length splitting and AdapterRemoval.
-- Depth generation/aggregation and callable-region generation.
-- BAM-to-CRAM conversion, downsampling and damage rescaling.
-- Input VCF compression/indexing, VCF concatenation and FreeBayes.
-- Callability filtering and mask generation/concatenation.
+With `--use_scratch`, the following private data uses a unique temporary
+directory under `--scratch_dir`:
 
-Qualimap also bypasses scratch when its input is CRAM, since it creates a
-temporary BAM. These tasks use the normal Nextflow work directory; place it on
-shared storage. Other processes retain opt-in scratch behavior, and other
-profiles are unchanged. Allocated scratch is still finite for retained tasks,
-particularly SRA extraction and sorting. Tools may use `/tmp` or `$TMPDIR`
-independently of Nextflow's scratch setting.
+- BWA/minibwa mapping: sorting spill files and BWA ALN's `.sai` file.
+- Samtools duplicate removal: collation, sorting and markdup temporary files.
+- Clumpify: intermediate read partitions when multiple groups are needed.
+- SRA extraction: downloaded archives, extraction workspace and uncompressed
+  FASTQs; compressed FASTQs are written directly to shared storage.
+- NCBI Datasets: the downloaded ZIP and extracted genome directory.
+- AdapterRemoval: undeclared auxiliary outputs, including discarded reads and
+  collapsed-truncated reads. The existing downstream FASTQ outputs are unchanged.
+- Damage rescaling: the intermediate rescaled BAM and sort workspace.
+- Qualimap with CRAM input: its temporary BAM.
+- Callable-region/mask generation, callability filtering, allele-balance/depth
+  filtering and BED combination: private BEDs and per-sample VCFs.
+- FreeBayes with a compressed reference: the uncompressed reference copy.
+- Variant-statistics plotting: copied inputs and the report-rendering workspace.
+
+Depth generation and aggregation stream compressed BED outputs without writing
+uncompressed BED intermediates. Fastp, read/BAM/VCF concatenation and merging,
+BAM-to-CRAM conversion, downsampling, reference indexing, streaming variant
+calling/filtering and other small-report tasks do not use task scratch.
+
+Temporary directories are removed on success and ordinary task failure. With
+`--use_scratch false`, the same managed temporary directories use the work
+directory instead. A missing/unwritable scratch root fails explicitly; there is
+no automatic fallback to shared storage. Forced termination (e.g. SIGKILL) can
+leave temporary directories for the cluster's scratch cleanup.
+
+The `arrhenius` profile uses `/scratch/local`; `dardel` uses `$PDC_TMP`. Other
+profiles require an explicit `--scratch_dir` when enabling scratch.
+Singularity/Apptainer and Docker bind the configured root into containers,
+expanding environment variables on the compute node.
+
+On Arrhenius, local scratch is approximately 6.7 GB per allocated CPU. Required
+outputs no longer consume that allocation, but private temporary data can still
+exceed it, particularly SRA extraction, CRAM-to-BAM conversion, sorting and
+uncompressed depth/mask processing. Size the allocation appropriately, choose a
+larger scratch root, or disable scratch for the run. This reduces peak shared
+storage usage, not the space required for outputs consumed by later processes.
+
+Scratch regression tests can be run with
+`python -m pytest -q bin/tests/test_scratch.py`. The helper tests run locally;
+module compilation requires Nextflow, and integration tests additionally require
+Singularity and the relevant images already present in `.singularity/`.
+Integration tests run small real tasks with scratch enabled and disabled, check
+output contents and placement, and verify temporary-workspace cleanup. Download
+providers are simulated; no SRA/genome downloads are made by these tests.
 
 ### Notes
 

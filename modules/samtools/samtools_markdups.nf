@@ -1,5 +1,4 @@
 process samtools_markdups {
-    scratch (params.use_scratch ? params.scratch_dir : false)
     tag "$sample_id"
     conda "${moduleDir}/environment.yml"
 
@@ -14,11 +13,12 @@ process samtools_markdups {
     script:
     """
     set -euo pipefail
+    source task_tmp.sh ${params.use_scratch} "\${TASK_SCRATCH_ROOT:-${params.use_scratch ? params.scratch_dir ?: '' : ''}}"
 
-    samtools collate -@ ${task.cpus} -O -u ${bam} | \
+    samtools collate -@ ${task.cpus} -O -u ${bam} "\$TMPDIR/collate" | \
     samtools fixmate -@ ${task.cpus} -m -u - - | \
-    samtools sort -@ ${task.cpus} -u - | \
-    samtools markdup -@ ${task.cpus} -r -f ${sample_id}.dedup_metrics.txt -O BAM - ${sample_id}.dedup.bam
+    samtools sort -@ ${task.cpus} -T "\$TMPDIR/sort" -u - | \
+    samtools markdup -@ ${task.cpus} -T "\$TMPDIR/markdup" -r -f ${sample_id}.dedup_metrics.txt -O BAM - ${sample_id}.dedup.bam
     #--use-read-groups 
     samtools quickcheck -v ${sample_id}.dedup.bam
     samtools index ${sample_id}.dedup.bam

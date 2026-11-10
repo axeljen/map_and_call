@@ -1,5 +1,4 @@
 process bcftools_filter_fmiss_maf {
-    scratch (params.use_scratch ? params.scratch_dir : false)
     tag "fmiss_maf_filter"
     label 'thin_medium'
     conda "${moduleDir}/environment.yml"

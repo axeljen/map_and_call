@@ -1,5 +1,4 @@
 process callable_regions {
-    scratch (params.use_scratch ? params.scratch_dir : false)
     tag "callable_regions"
     label 'medium_short'
     conda "${moduleDir}/environment.yml"
@@ -20,8 +19,9 @@ process callable_regions {
     def max_dp_sexlinked = sex_assignment == "hemizygous" ? (max_dp instanceof Integer ? max_dp / 2 : max_dp) : max_dp
 
     """
+    source task_tmp.sh ${params.use_scratch} "\${TASK_SCRATCH_ROOT:-${params.use_scratch ? params.scratch_dir ?: '' : ''}}"
     # make a temporary bedfile while filtering
-    zcat ${bedfile} > tmp_${sample_id}_callable.bed
+    zcat ${bedfile} > "\$TMPDIR/callable.bed"
 
     # make sex-limited and non-sexlimited bedstrings based on the input lists
     for scaffold in $sex_limited_scaffolds_list; do
@@ -29,29 +29,30 @@ process callable_regions {
         end=\$(awk -v scaffold="\$scaffold" '\$1 == scaffold {print \$2}' ${faidx})
         echo -e "\${scaffold}\\t\${start}\\t\${end}"
         # remove this scaffold from the temporary bedfile
-        cat tmp_${sample_id}_callable.bed | awk -v scaffold="\$scaffold" '\$1 != scaffold' > tmp_${sample_id}_callable.tmp.bed
-        mv tmp_${sample_id}_callable.tmp.bed tmp_${sample_id}_callable.bed
-    done > sex_limited_scaffolds.bed
+        awk -v scaffold="\$scaffold" '\$1 != scaffold' "\$TMPDIR/callable.bed" > "\$TMPDIR/callable.tmp.bed"
+        mv "\$TMPDIR/callable.tmp.bed" "\$TMPDIR/callable.bed"
+    done > "\$TMPDIR/sex_limited_scaffolds.bed"
 
     for scaffold in $non_sex_limited_scaffolds_list; do
         start=0
         end=\$(awk -v scaffold="\$scaffold" '\$1 == scaffold {print \$2}' ${faidx})
         echo -e "\${scaffold}\\t\${start}\\t\${end}"
         # remove this scaffold from the temporary bedfile
-        cat tmp_${sample_id}_callable.bed | awk -v scaffold="\$scaffold" '\$1 != scaffold' > tmp_${sample_id}_callable.tmp.bed
-        mv tmp_${sample_id}_callable.tmp.bed tmp_${sample_id}_callable.bed
-    done > non_sex_limited_scaffolds.bed
+        awk -v scaffold="\$scaffold" '\$1 != scaffold' "\$TMPDIR/callable.bed" > "\$TMPDIR/callable.tmp.bed"
+        mv "\$TMPDIR/callable.tmp.bed" "\$TMPDIR/callable.bed"
+    done > "\$TMPDIR/non_sex_limited_scaffolds.bed"
 
     # filter the temporary bedfile based on min and max depth
-    cat tmp_${sample_id}_callable.bed | awk -v min_dp="${min_dp}" -v max_dp="${max_dp}" -v OFS='\\t' ' \$4 >= min_dp && \$4 <= max_dp {print \$1, \$2, \$3}' > tmp_${sample_id}_callable.filtered.bed && mv tmp_${sample_id}_callable.filtered.bed tmp_${sample_id}_callable.bed
+    awk -v min_dp="${min_dp}" -v max_dp="${max_dp}" -v OFS='\\t' ' \$4 >= min_dp && \$4 <= max_dp {print \$1, \$2, \$3}' "\$TMPDIR/callable.bed" > "\$TMPDIR/callable.filtered.bed"
+    mv "\$TMPDIR/callable.filtered.bed" "\$TMPDIR/callable.bed"
 
     # if sex assignment is hemizygous, half the min and max dp for both the sex-limited and non-sex-limited scaffolds
     if [[ "${sex_assignment}" == "hemizygous" ]]; then
         # and filter both these files into the final callable bedfile
-        cat sex_limited_scaffolds.bed non_sex_limited_scaffolds.bed | awk -v min_dp=${min_dp_sexlinked} -v max_dp=${max_dp_sexlinked} -v OFS='\\t' ' \$4 >= min_dp && \$4 <= max_dp {print \$1, \$2, \$3}' >> tmp_${sample_id}_callable.bed
+        cat "\$TMPDIR/sex_limited_scaffolds.bed" "\$TMPDIR/non_sex_limited_scaffolds.bed" | awk -v min_dp=${min_dp_sexlinked} -v max_dp=${max_dp_sexlinked} -v OFS='\\t' ' \$4 >= min_dp && \$4 <= max_dp {print \$1, \$2, \$3}' >> "\$TMPDIR/callable.bed"
     # otherwise if homozygous, keep same min and max dp and simply skip the sex-limited scaffolds (if any)
     else
-        cat non_sex_limited_scaffolds.bed | awk -v min_dp="${min_dp}" -v max_dp="${max_dp}" -v OFS='\\t' ' \$4 >= min_dp && \$4 <= max_dp {print \$1, \$2, \$3}' >> tmp_${sample_id}_callable.bed
+        cat "\$TMPDIR/non_sex_limited_scaffolds.bed" | awk -v min_dp="${min_dp}" -v max_dp="${max_dp}" -v OFS='\\t' ' \$4 >= min_dp && \$4 <= max_dp {print \$1, \$2, \$3}' >> "\$TMPDIR/callable.bed"
     fi
 
     # finally, mask out any regions that are in the reference mask bedfile
@@ -59,27 +60,17 @@ process callable_regions {
     if [[ -f "${params.reference_mask}" ]]; then
         reference_mask="${params.reference_mask}"
     else
-        touch reference_mask.bed
-        reference_mask="reference_mask.bed"
+        touch "\$TMPDIR/reference_mask.bed"
+        reference_mask="\$TMPDIR/reference_mask.bed"
     fi
-    bedtools subtract -a tmp_${sample_id}_callable.bed -b \${reference_mask} > tmp.${sample_id}.callable_regions.bed
+    bedtools subtract -a "\$TMPDIR/callable.bed" -b "\${reference_mask}" > "\$TMPDIR/callable_regions.bed"
 
     # Sort and merge overlapping/adjacent regions
     # First merge per-scaffold using GNU sort (disk-based) to avoid OOM with large files,
     # then re-sort by faidx scaffold order on the much smaller merged output
-    bedtools merge -i tmp.${sample_id}.callable_regions.bed > tmp.${sample_id}.merged.bed
+    bedtools merge -i "\$TMPDIR/callable_regions.bed" > "\$TMPDIR/merged.bed"
     # and sort the final output so that the sex-limited scaffolds show up where they should
-    bedtools sort -faidx ${faidx} -i tmp.${sample_id}.merged.bed > ${sample_id}.callable_regions.bed
-
-    # remove temporary files
-    rm tmp_${sample_id}_callable.bed
-    rm tmp.${sample_id}.callable_regions.bed
-    rm tmp.${sample_id}.merged.bed
-    rm sex_limited_scaffolds.bed
-    rm reference_mask.bed
-
-    # gzip the final output to save space
-    gzip -f ${sample_id}.callable_regions.bed
+    bedtools sort -faidx ${faidx} -i "\$TMPDIR/merged.bed" | gzip -c > ${sample_id}.callable_regions.bed.gz
 
     """
 
