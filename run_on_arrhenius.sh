@@ -1,8 +1,8 @@
 #!/bin/bash -l
 
-#SBATCH -A naiss2026-4-730-cpu
+#SBATCH -A <NAISS_COMPUTE_PROJECT>
 #SBATCH -p cpu
-#SBATCH -c 8
+#SBATCH -c 4
 #SBATCH -t 3-00:00:00
 #SBATCH -J map-and-call
 #SBATCH --mail-type=FAIL
@@ -11,25 +11,25 @@
 
 # Load modules for nextflow and conda/mamba. Module names as per 2026-06-17.
 module load buildtool-easybuild/5.2.1-hpca3ef7d197
-# module load Miniforge3/26.3.2-2
+module load Miniforge3/26.3.2-2
 module load Nextflow/25.10.6-eb
 module load Java/25.0.3-bdist
 
 # Path to input file with sample and read information, see readme for details.
-INPUT_CSV='sample_sheet.csv'
+INPUT_CSV='/path/to/input.csv'
 
 # Path to reference genome (fasta format).
-REFERENCE=GCA_976913865.1
+REFERENCE='/path/to/reference_genome.fna'
 
 # Path to reads directory. this argument can be omitted if full paths to reads
 # are provided in the input csv (if so, remove the --reads_dir argument from
 # the command below).
-# READS_DIR=readlinks
+READS_DIR='/path/to/reads_directory'
 
 # Optionally provide a list of scaffols upon which to perform variant calling.
 # If not provided, also remove the arguemnt from the command, and the pipeline
 # will be run for the entire genome.
-SCAFFOLD_LIST=scaffold_list.txt
+SCAFFOLD_LIST='/path/to/scaffolds.txt'
 
 # Variant caller to use, either 'freebayes' or 'bcftools'.
 VARIANT_CALLER='freebayes'
@@ -40,7 +40,7 @@ VARIANT_CALLER='freebayes'
 CHUNK_SIZE=20
 
 # Output directory (created if not present).
-OUTDIR=bean_geese_variants
+OUTDIR='/path/to/output_directory'
 
 # Conda tmp/cache files. Enable to save file-disk quota. Suitable place  for
 # these folders is in your project directory.
@@ -53,19 +53,16 @@ OUTDIR=bean_geese_variants
 # Change to full path to main.nf if run from outside the map_and_call folder.
 nextflow run main.nf \
     -profile 'arrhenius' \
-    --use_scratch \
     -resume \
-    --skip_premapping_dedup \
-    --modern_mapper minibwa \
-    --with_singularity \
+    --use_mamba \
     --input "$INPUT_CSV" \
     --reference "$REFERENCE" \
+    --reads_dir "$READS_DIR" \
     --scaffold_list "$SCAFFOLD_LIST" \
     --outdir "$OUTDIR" \
     --slurm_account "$SLURM_JOB_ACCOUNT" \
     --variant_caller "$VARIANT_CALLER" \
-    --chunk_size "$CHUNK_SIZE" \
-    --boost_cleanup
+    --chunk_size "$CHUNK_SIZE"
 
 ##### Some additional, potentially useful flags:
 
