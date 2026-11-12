@@ -252,6 +252,10 @@ def asBoolean(value) {
     return value.toString().toBoolean()
 }
 
+def skipVariantCalling() {
+    return params.mode == 'map_only' || asBoolean(params.skip_variant_calling)
+}
+
 /*
  * Get filter expressions for variant calling based on variant caller type
  * Returns map with snp_filter_expr and indel_filter_expr
@@ -349,14 +353,15 @@ workflow {
     non_sex_limited_contigs = channel.value(non_sex_limited_list)
 
     // Validate mode parameter
-    if (!(params.mode in ['map_and_call', 'call_variants', 'filter_variants', 'preprocess_reads', 'read_qc'])) {
-        error "Unknown mode '${params.mode}'. Use 'map_and_call', 'call_variants', 'filter_variants', 'preprocess_reads' or 'read_qc'."
+    if (!(params.mode in ['map_and_call', 'map_only', 'call_variants', 'filter_variants', 'preprocess_reads', 'read_qc'])) {
+        error "Unknown mode '${params.mode}'. Use 'map_and_call', 'map_only', 'call_variants', 'filter_variants', 'preprocess_reads' or 'read_qc'."
     }
 
-    // map_and_call/call_variants/filter_variants run the full pipeline (reference indexing);
+    // Mapping and variant modes use reference indexing;
     // preprocess_reads/read_qc are lightweight modes that stop before mapping/variant calling.
-    def run_full_pipeline = params.mode in ['map_and_call', 'call_variants', 'filter_variants']
-    def run_variant_calling = run_full_pipeline && params.mode != 'filter_variants' && !params.skip_variant_calling
+    def run_mapping = params.mode in ['map_and_call', 'map_only']
+    def run_full_pipeline = run_mapping || params.mode in ['call_variants', 'filter_variants']
+    def run_variant_calling = run_full_pipeline && params.mode != 'filter_variants' && !skipVariantCalling()
     def run_filtering = run_variant_calling || params.mode == 'filter_variants'
 
     // Default output channels, overridden below depending on mode
@@ -396,10 +401,10 @@ workflow {
         params.y_scaffolds ?: [],
         params.z_scaffolds ?: [],
         params.w_scaffolds ?: [],
-        params.mode == 'map_and_call' && WorkflowUtils.sampleSheetHasDataType(params.input, '2')
+        run_mapping && WorkflowUtils.sampleSheetHasDataType(params.input, '2')
     )
 
-    if (params.mode == 'map_and_call') {
+    if (run_mapping) {
         ch_input = PREPARE_READS(params.input).reads
             .branch {
                 sample_id, lane, data_type, library, r1, r2 ->
@@ -562,7 +567,7 @@ workflow {
                   ratio, sex_assignment, 'NA', 'NA', 'NA')
         }
 
-    if (params.mode == 'map_and_call' && params.downsample_bams) {
+    if (run_mapping && params.downsample_bams) {
         sample_stats = sample_depths
             .combine(PROCESS_BAMS.out.sample_depths_downsampled, by: 0)
             .map { sample_id, autosomal_dp, non_sex_limited_dp, sex_limited_dp, ratio, sex_assignment,
@@ -849,62 +854,61 @@ output {
     }
     raw_vcf {
         path "03_genotypes/00_raw_variants"
-        enabled asBoolean(params.store_raw_vcf) && !asBoolean(params.skip_variant_calling)
+        enabled asBoolean(params.store_raw_vcf) && !skipVariantCalling()
     }
     raw_variant_stats {
         path "01_reports/02_variantstats/00_raw_variants"
-        enabled !asBoolean(params.skip_variant_calling)
+        enabled !skipVariantCalling()
     }
     raw_vcf_stats_plot {
         path "01_reports/02_variantstats/00_raw_variants"
-        enabled !asBoolean(params.skip_variant_calling)
+        enabled !skipVariantCalling()
     }
     filtered_snps_stats {
         path "01_reports/02_variantstats/01_filtered_snps"
-        enabled !asBoolean(params.skip_variant_calling)
+        enabled !skipVariantCalling()
     }
     filtered_snps_stats_plot {
        path "01_reports/02_variantstats/01_filtered_snps"
-        enabled !asBoolean(params.skip_variant_calling)
+        enabled !skipVariantCalling()
     }
     filtered_indel_stats {
         path "01_reports/02_variantstats/02_filtered_indels"
-        enabled !asBoolean(params.skip_variant_calling)
+        enabled !skipVariantCalling()
     }
     filtered_indel_stats_plot {
         path "01_reports/02_variantstats/02_filtered_indels"
-        enabled !asBoolean(params.skip_variant_calling)
+        enabled !skipVariantCalling()
     }
     callable_regions {
         path "03_genotypes/02_maskfiles"
-        enabled !asBoolean(params.skip_variant_calling)
+        enabled !skipVariantCalling()
     }
     snpable_regions {
         path "03_genotypes/02_maskfiles"
-        enabled !asBoolean(params.skip_variant_calling)
+        enabled !skipVariantCalling()
     }
     invariant_calls {
         path "03_genotypes/02_maskfiles"
-        enabled !asBoolean(params.skip_variant_calling)
+        enabled !skipVariantCalling()
     }
     filtered_snps {
         path "03_genotypes/01_filtered_variants"
-        enabled !asBoolean(params.skip_variant_calling)
+        enabled !skipVariantCalling()
     }
     filtered_indels {
         path "03_genotypes/01_filtered_variants"
-        enabled !asBoolean(params.skip_variant_calling)
+        enabled !skipVariantCalling()
     }
     filtered_invariants {
         path "03_genotypes/01_filtered_variants"
-        enabled asBoolean(params.output_invariant_sites) && !asBoolean(params.skip_variant_calling)
+        enabled asBoolean(params.output_invariant_sites) && !skipVariantCalling()
     }
     summary_statistics {
         path "01_reports"
-        enabled !asBoolean(params.skip_variant_calling)
+        enabled !skipVariantCalling()
     }
     damage_profiles {
         path "01_reports/03_damage_profiles"
     }
 }
-

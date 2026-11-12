@@ -237,6 +237,7 @@ Workflow parameters can be changed by editing the configuration file
 
 | Option | Type | Default | Description |
 |---|---:|---:|---|
+| `--mode` | string | `map_and_call` | Workflow mode: `map_and_call`, `map_only`, `call_variants`, `filter_variants`, `preprocess_reads`, or `read_qc`. |
 | `--mapper` | string | `bwa_mem` | Read mapper to use. Currently only `bwa_mem` is supported. |
 | `--variant_caller` | string | `bcftools` | Variant caller to use. Supported values: `freebayes`, `bcftools`. |
 | `--skip_variant_calling` | boolean | `false` | Stop after BAM/CRAM processing and skip variant calling and filtering. |
@@ -439,7 +440,7 @@ Now `example_data` contains everything you need for a complete run from reads to
 
 The --mode parameter controls the start and end point of the pipeline, allowing you to run only specific parts of it. By default, mode is set to 'map_and_call', and will run the entire mapping and variant calling from beginning to end. Other options are:
 
-  --mode read-qc
+  --mode read_qc
 
 This will run only the read quality control part of the pipeline. Takes exactly the same input as the full 'map_and_call' mode.
 
@@ -449,7 +450,7 @@ This will run only the read preprocessing part of the pipeline, including trimmi
 
   --mode map_only
 
-This will run only the read mapping part of the pipeline, producing BAM/CRAM files without variant calling. Takes exactly the same input as the full 'map_and_call' mode.
+This runs read preprocessing, mapping, and BAM/CRAM processing without variant calling or filtering. It takes the same inputs as `map_and_call` and enforces the same behavior as `--skip_variant_calling`, even if that flag is explicitly set to false.
 
   --mode call_variants
 

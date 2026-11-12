@@ -63,11 +63,11 @@ workflow INDEX_REFERENCE {
     // Decide which indexes are needed based on the selected mappers.
     // BWA index is needed if bwa is used for modern reads, or if there are historical
     // samples to map (historical reads are always mapped with bwa mem/aln/split).
-    def need_bwa_index     = mode == 'map_and_call' && (
+    def need_bwa_index     = mode in ['map_and_call', 'map_only'] && (
         params.modern_mapper == 'bwa_mem' ||
         (has_historical && params.historical_mapper in ['bwa_mem', 'bwa_aln', 'split'])
     )
-    def need_minibwa_index = mode == 'map_and_call' && params.modern_mapper == 'minibwa'
+    def need_minibwa_index = mode in ['map_and_call', 'map_only'] && params.modern_mapper == 'minibwa'
 
     // ─────────────────────────────────────────────────────────────────────────────
     // Index reference genome with minibwa (only if minibwa is the modern mapper)

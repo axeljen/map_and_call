@@ -10,7 +10,8 @@
 #SBATCH -e ./logs/%x-%j.error
 
 # load nextflow and modules
-ml Nextflow Miniforge3 Mamba/23.11.0-0
+# ml Nextflow Miniforge3 Mamba/23.11.0-0
+ml Nextflow
 
 # Path to input file with sample and read information, see readme for details.
 INPUT_CSV='/path/to/input.csv'
@@ -51,6 +52,7 @@ nextflow run main.nf --input $INPUT_CSV \
     --outdir $OUTDIR \
     --slurm_account $SLURM_ACCOUNT \
     --variant_caller $VARIANT_CALLER \
+    --with_singularity \
     --chunk_size $CHUNK_SIZE
 
 ##### Some additional, potentially useful flags:
