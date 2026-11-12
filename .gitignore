@@ -35,5 +35,7 @@ bin/tests/test_reference_input.py
 bin/tests/test_sra_input.py
 bean_geese_variants
 readlinks
-run_on_arrhenius_batch1.sh
-
+/run_on_arrhenius_batch1.sh
+/sample_sheet_batch1.csv
+/sample_sheet_batch2.csv
+/scaffold_list.txt
